@@ -101,7 +101,10 @@ function M.plan(target, qty, avail, recipes, points)
       local c = needTool(t, runs, path, depth + 1)
       if c then c.tool = true; nodes[#nodes + 1] = c end
     end
-    for _, inp in ipairs(r.inputs) do nodes[#nodes + 1] = need(inp.key, inp.count * runs, path, depth + 1) end
+    for _, inp in ipairs(r.inputs) do
+      local key = recipes.inputKey and recipes.inputKey(r, inp.key) or inp.key
+      nodes[#nodes + 1] = need(key, inp.count * runs, path, depth + 1)
+    end
     for _, c in ipairs(nodes) do
       children[#children + 1] = c
       missing = missing + c.missing

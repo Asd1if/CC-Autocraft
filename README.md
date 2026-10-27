@@ -10,7 +10,7 @@ Storage and autocrafting for CC: Tweaked (Minecraft 1.21.1, NeoForge), built for
 - an **order queue** (FIFO, saved across restarts) where steps run in parallel on free turtles and machines;
 - crafty turtles for crafting-table recipes, any Create / GregTech machine for the rest;
 - tools that wear out (hammers, wrenches) are planned by durability;
-- **tag substitutes**: a recipe encoded with oak planks takes any planks;
+- **substitute groups**: a recipe encoded with oak planks takes any planks;
 - auto-restock, Create clipboard orders, a small tank monitor for the encoder.
 
 The [Mod](Mod) folder holds an EMI/JEI addon that lays a recipe from the recipe viewer into the encoder barrel (Fabric 1.20.1 / 1.21.1, Forge 1.20.1, NeoForge 1.21.1).
@@ -43,7 +43,7 @@ The first start copies `defaults/config.lua` and `defaults/multiblock.json` into
 2. On the monitor press **ADD**, then Turtle / Machine / Multiblock / Pool, then the machine.
 3. The test runs once, the results come back to the barrel (slot 14 first), and the recipe is saved.
 
-Items carrying a tag from `substitutes` in the config become "any item of that tag". Keep that list to tags that don't change the result: planks yes, logs no (a spruce log gives spruce planks).
+Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item of the group" when planning and crafting, for old recipes too.
 
 ## Monitor
 - Tap an item to see its craft tree. `< << ][ >> >` is −1, −10, order, +10, +1, and `[N]` is the most you can make.
@@ -62,9 +62,19 @@ Items carrying a tag from `substitutes` in the config become "any item of that t
 | `encoder`, `recipe_tanks` | the encoder barrel and its fluid tanks |
 | `pools` | several identical machines under one name, a step is split between them |
 | `restock` | minimum stock that is crafted automatically when nothing else runs |
-| `substitutes` | tags that encode as "any item of the tag" |
+| `substitutes` | groups of interchangeable items, see below |
 | `batch` | crafts per turtle call / machine load-ahead (default 16) |
 | `debug` | full log in `data/autocraft.log` (otherwise warnings and errors only) |
+
+## Substitute groups
+```lua
+substitutes = {
+  planks = { "minecraft:oak_planks", "minecraft:spruce_planks", ... },
+  coal   = { "minecraft:coal", "minecraft:charcoal" },
+  copper = { "minecraft:copper_ingot", "othermod:copper_ingot" },  -- your own
+},
+```
+Any member of a group can replace any other in a recipe input, and the biggest pile in storage goes first. Presets ship for planks, wooden slabs, cobblestone and coal. If the result names the member's variant there is no substitution: an oak slab still needs oak planks, while a chest takes any planks.
 
 ## When something breaks
 The main loops (screen, network, storage, queue, tank monitor) restart after an error, at most 5 times a minute. The error and its stack go to `data/autocraft.log`. Please attach that part of the log to an issue.

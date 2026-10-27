@@ -40,19 +40,41 @@ return {
   encoder = "minecraft:barrel_0",  -- бочка на 27 слотов: сетка 4,5,6 / 13,14,15 / 22,23,24
   recipe_tanks = { "create:fluid_tank_1", "create:fluid_tank_2", "create:fluid_tank_3" },
 
-  -- ===================================================================== замены по тегам
-  -- При кодировании рецепта предмет с одним из этих тегов записывается как «любой предмет
-  -- тега»: сундук из дубовых досок потом крафтится из любых досок (берётся тот вид, которого
-  -- больше на складе). Только теги, от которых не зависит результат: брёвна сюда не годятся
-  -- (из елового бревна выйдут еловые доски, а не дубовые), шерсть тоже (цвет кровати).
-  -- Уже сохранённые рецепты не меняются — закодируйте заново.
+  -- ===================================================================== взаимозаменяемые предметы
+  -- Группы: любой предмет группы подходит вместо любого другого. Сундук, закодированный из
+  -- дубовых досок, крафтится из любых досок — берётся тот вид, которого больше на складе.
+  -- Работает сразу и для уже сохранённых рецептов. Если результат называет вид предмета
+  -- (дубовая плита, дубовая лодка), замены нет: из еловых досок дубовая плита не выйдет.
+  -- Свои группы — по образцу:  copper = { "minecraft:copper_ingot", "othermod:copper_ingot" },
   substitutes = {
-    "minecraft:planks",
-    "minecraft:wooden_slabs",
-    "minecraft:stone_crafting_materials",
-    "minecraft:stone_tool_materials",
-    "minecraft:coals",
-    "c:cobblestones",
+    planks = {
+      "minecraft:oak_planks",
+      "minecraft:spruce_planks",
+      "minecraft:birch_planks",
+      "minecraft:jungle_planks",
+      "minecraft:acacia_planks",
+      "minecraft:dark_oak_planks",
+      "minecraft:mangrove_planks",
+      "minecraft:cherry_planks",
+      "minecraft:bamboo_planks",
+      "minecraft:crimson_planks",
+      "minecraft:warped_planks",
+    },
+    wooden_slabs = {
+      "minecraft:oak_slab",
+      "minecraft:spruce_slab",
+      "minecraft:birch_slab",
+      "minecraft:jungle_slab",
+      "minecraft:acacia_slab",
+      "minecraft:dark_oak_slab",
+      "minecraft:mangrove_slab",
+      "minecraft:cherry_slab",
+      "minecraft:bamboo_slab",
+      "minecraft:crimson_slab",
+      "minecraft:warped_slab",
+    },
+    cobblestone = { "minecraft:cobblestone", "minecraft:cobbled_deepslate", "minecraft:blackstone" },
+    coal = { "minecraft:coal", "minecraft:charcoal" },
   },
 
   -- ===================================================================== заказ по clipboard

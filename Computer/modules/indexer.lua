@@ -3,8 +3,7 @@
 -- Keys: items are "name" or "name#nbt" (crafting tells NBT variants apart),
 --       "name#*" matches any NBT variant (tools whose damage changes NBT),
 --       fluids are "~name" (so minecraft:water the fluid never clashes with an item id),
---       "@tag" is any item of that tag (recipe inputs from cfg.substitutes: "@minecraft:planks").
---       Tags of stored items are learned with their display names (data/tags.json).
+--       "@group" is any item of a cfg.substitutes group ("@planks": any planks).
 -- live_stock (M.stockList) merges NBT variants by name, as agreed.
 --
 -- Two pools: the main storage (what the player sees and takes from) and the craft storage
@@ -20,39 +19,55 @@ local M = {
   tanks = {},   -- tank name -> tanks() result
   agg = nil,    -- cached aggregate, rebuilt when dirty
   names = {},   -- item id -> display name
-  tags = {},    -- item id -> { tag = true }, learned once (getItemDetail is slow)
   dirty = true,
 }
 
 local NAMES_FILE = "data/names.json"
-local TAGS_FILE = "data/tags.json"
 
 function M.itemKey(name, nbt) return nbt and (name .. "#" .. nbt) or name end
 function M.fluidKey(name) return "~" .. name end
 function M.isFluid(key) return key:sub(1, 1) == "~" end
 function M.anyKey(name) return name .. "#*" end
-function M.isTag(key) return key:sub(1, 1) == "@" end
-function M.tagKey(tag) return "@" .. tag end
+function M.isGroup(key) return key:sub(1, 1) == "@" end
 
--- Remembers an item's tags: { [tag] = true } as getItemDetail gives them.
-function M.learnTags(name, tags)
-  local set = {}
-  for t, v in pairs(tags or {}) do if v then set[t] = true end end
-  M.tags[name] = set
-end
+-- Groups from cfg.substitutes: { planks = { "minecraft:oak_planks", ... } }. A recipe input
+-- from a group stands for any member ("@planks"), unless the recipe's result names that
+-- member's variant: oak slabs need oak planks, a chest takes any.
+local function strip(id) return (id:gsub("^[^:]+:", "")) end
 
--- The cfg.substitutes tag an item stands for in recipes (first match in config order), or nil.
-function M.substituteTag(name)
-  local set = M.tags[name] or {}
-  for _, t in ipairs(M.cfg and M.cfg.substitutes or {}) do
-    if set[t] then return t end
+-- The part of a member's id that differs from the rest of its group: "oak" of oak_planks,
+-- "dark_oak" of dark_oak_planks (words shared at the end by all members are cut off).
+local function variant(name, members)
+  local words = {}
+  for w in strip(name):gmatch("[^_]+") do words[#words + 1] = w end
+  local cut = #words - 1
+  for _, m in ipairs(members) do
+    local mw = {}
+    for w in strip(m):gmatch("[^_]+") do mw[#mw + 1] = w end
+    local same = 0
+    while same < #words and same < #mw and words[#words - same] == mw[#mw - same] do same = same + 1 end
+    cut = math.min(cut, same)
   end
+  return table.concat(words, "_", 1, #words - math.max(0, cut))
 end
 
--- Item ids known to carry `tag`, most in storage first.
-function M.tagMembers(tag)
+local groupOf -- item id -> group name, built from cfg.substitutes
+local function groups()
+  if not groupOf then
+    groupOf = {}
+    for g, members in pairs(M.cfg and M.cfg.substitutes or {}) do
+      if type(g) == "string" and type(members) == "table" then
+        for _, id in ipairs(members) do groupOf[id] = g end
+      end
+    end
+  end
+  return groupOf
+end
+
+-- Members of a group, most in storage first.
+function M.groupMembers(g)
   local list = {}
-  for name, set in pairs(M.tags) do if set[tag] then list[#list + 1] = name end end
+  for _, id in ipairs((M.cfg and M.cfg.substitutes or {})[g] or {}) do list[#list + 1] = id end
   local by = M.agg and M.agg.byName or {}
   table.sort(list, function(a, b)
     if (by[a] or 0) ~= (by[b] or 0) then return (by[a] or 0) > (by[b] or 0) end
@@ -61,12 +76,23 @@ function M.tagMembers(tag)
   return list
 end
 
--- Whether an item key belongs to a wanted key: the same, "name#*", or "@tag".
+-- The key a recipe input is planned and fetched by: "@group" when the item is in a group and
+-- the recipe's result doesn't name its variant, otherwise the key itself.
+function M.substitute(key, resultKey)
+  if not key or M.isFluid(key) or M.isGroup(key) or key:find("#", 1, true) then return key end
+  local g = groups()[key]
+  if not g then return key end
+  local v = variant(key, M.cfg.substitutes[g])
+  if resultKey and strip(M.parseKey(resultKey)):find(v, 1, true) then return key end
+  return "@" .. g
+end
+
+-- Whether an item key belongs to a wanted key: the same, "name#*", or "@group".
 function M.matches(key, wanted)
   if key == wanted then return true end
   local name = M.parseKey(key)
   if wanted == name .. "#*" then return true end
-  if M.isTag(wanted) then return (M.tags[name] or {})[wanted:sub(2)] == true end
+  if M.isGroup(wanted) then return groups()[name] == wanted:sub(2) end
   return false
 end
 
@@ -79,7 +105,7 @@ function M.parseKey(key)
 end
 
 function M.displayName(key)
-  if M.isTag(key) then return "Any " .. util.formatName(key:sub(2)):lower() end
+  if M.isGroup(key) then return "Any " .. key:sub(2):gsub("_", " ") end
   local name, nbt, fluid = M.parseKey(key)
   local d = M.names[name] or util.formatName(name)
   if nbt and nbt ~= "*" then d = d .. "*" end
@@ -89,7 +115,7 @@ end
 function M.init(cfg, extraExclude)
   M.cfg = cfg
   M.names = util.readJSON(NAMES_FILE) or {}
-  M.tags = util.readJSON(TAGS_FILE) or {}
+  groupOf = nil
   local ex = util.set(cfg.exclude)
   if cfg.encoder then ex[cfg.encoder] = true end
   for _, n in ipairs(cfg.recipe_tanks or {}) do ex[n] = true end
@@ -184,9 +210,9 @@ end
 function M.count(key)
   local a = aggregate()
   if M.isFluid(key) then return a.fluids[key] or 0 end
-  if M.isTag(key) then
+  if M.isGroup(key) then
     local n = 0
-    for _, name in ipairs(M.tagMembers(key:sub(2))) do n = n + (a.byName[name] or 0) end
+    for _, name in ipairs(M.groupMembers(key:sub(2))) do n = n + (a.byName[name] or 0) end
     return n
   end
   local name, nbt = M.parseKey(key)
@@ -239,10 +265,10 @@ end
 -- Moves up to `count` of an item key from storage into inventory `to` (optional slot).
 -- Craft storage first. Returns moved amount.
 function M.extract(key, count, to, toSlot)
-  if M.isTag(key) then
+  if M.isGroup(key) then
     -- one kind per slot (a crafting slot can't hold oak and spruce); any mix without a slot
     local moved = 0
-    for _, name in ipairs(M.tagMembers(key:sub(2))) do
+    for _, name in ipairs(M.groupMembers(key:sub(2))) do
       if moved >= count then break end
       if not toSlot or (aggregate().byName[name] or 0) >= count then
         moved = moved + M.extract(name, count - moved, to, toSlot)
@@ -251,7 +277,7 @@ function M.extract(key, count, to, toSlot)
     end
     if toSlot and moved == 0 then
       -- no single kind has enough: take the biggest pile, the caller sees the shortfall
-      local first = M.tagMembers(key:sub(2))[1]
+      local first = M.groupMembers(key:sub(2))[1]
       if first then moved = M.extract(first, count, to, toSlot) end
     end
     return moved
@@ -357,8 +383,8 @@ end
 -- Moves up to n of a key from the main storage into the craft storage. Returns moved amount.
 function M.stage(key, n)
   local moved = 0
-  if M.isTag(key) then
-    for _, name in ipairs(M.tagMembers(key:sub(2))) do
+  if M.isGroup(key) then
+    for _, name in ipairs(M.groupMembers(key:sub(2))) do
       if moved >= n then break end
       moved = moved + M.stage(name, n - moved)
     end
@@ -415,15 +441,14 @@ function M.learnNames(maxPerCall)
   for _, inv in ipairs(itemSources()) do
     for slot, it in pairs(M.invs[inv] or {}) do
       if learned >= (maxPerCall or 8) then break end
-      if not M.names[it.name] or not M.tags[it.name] then
+      if not M.names[it.name] then
         local ok, d = pcall(peripheral.call, inv, "getItemDetail", slot)
         M.names[it.name] = ok and d and d.displayName or util.formatName(it.name)
-        M.learnTags(it.name, ok and d and d.tags)
         learned = learned + 1
       end
     end
   end
-  if learned > 0 then util.writeJSON(NAMES_FILE, M.names); util.writeJSON(TAGS_FILE, M.tags) end
+  if learned > 0 then util.writeJSON(NAMES_FILE, M.names) end
   return learned
 end
 

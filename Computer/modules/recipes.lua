@@ -68,12 +68,19 @@ function M.mainKey(r)
   return r.outputs[1] and r.outputs[1].key
 end
 
--- Tag support, set by main.lua (indexer.matches / indexer.tagMembers): without it only exact
--- keys and "name#*" match.
+-- Substitute groups, set by main.lua (indexer.matches / groupMembers / substitute): without
+-- them only exact keys and "name#*" match.
 M.matches = function(key, wanted) return key == wanted or key .. "#*" == wanted end
-M.tagMembers = function() return {} end
+M.groupMembers = function() return {} end
+M.substitute = function(key) return key end
 
--- How many `key` one run of r produces ("@tag": every output of that tag).
+-- The key an input of r is planned and fetched by: "@planks" for oak planks in a chest
+-- recipe, the item itself where the result depends on it (oak slab).
+function M.inputKey(r, key)
+  return M.substitute(key, M.mainKey(r))
+end
+
+-- How many `key` one run of r produces ("@group": every output of that group).
 function M.yield(r, key)
   local n = 0
   for _, o in ipairs(r.outputs) do if M.matches(o.key, key) then n = n + o.count end end
@@ -84,7 +91,7 @@ function M.forOutput(key)
   if key:sub(1, 1) == "@" then
     -- recipes of every member, the most stocked kind first
     local list = {}
-    for _, name in ipairs(M.tagMembers(key:sub(2))) do
+    for _, name in ipairs(M.groupMembers(key:sub(2))) do
       for _, r in ipairs(M.byOutput[name] or {}) do
         if M.mainKey(r) == name then list[#list + 1] = r end
       end

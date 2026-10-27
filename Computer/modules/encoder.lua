@@ -37,39 +37,12 @@ function M.readGrid()
     if d then
       grid[i] = { key = itemKey(d), name = d.name, count = d.count, maxCount = d.maxCount or 64 }
       indexer.names[d.name] = indexer.names[d.name] or d.displayName
-      indexer.learnTags(d.name, d.tags)
       n = n + 1
     else
       grid[i] = {}
     end
   end
   return grid, n
-end
-
--- Inputs whose item carries a cfg.substitutes tag become "@tag" (any planks...). Tools and
--- NBT items stay exact. Returns the recipe and the substitutions made { { from, to } }.
-function M.applyTags(r)
-  local swapped, seen = {}, {}
-  local function swap(key)
-    if not key or indexer.isFluid(key) or indexer.isTag(key) or key:find("#", 1, true) then return key end
-    local tag = indexer.substituteTag(key)
-    if not tag then return key end
-    local to = indexer.tagKey(tag)
-    if not seen[key] then seen[key] = true; swapped[#swapped + 1] = { key, to } end
-    return to
-  end
-  for _, g in pairs(r.grid or {}) do
-    if g.key and not g.tool then g.key = swap(g.key) end
-  end
-  local merged, order = {}, {}
-  for _, inp in ipairs(r.inputs or {}) do
-    local k = swap(inp.key)
-    if not merged[k] then merged[k] = 0; order[#order + 1] = k end
-    merged[k] = merged[k] + inp.count
-  end
-  r.inputs = {}
-  for _, k in ipairs(order) do r.inputs[#r.inputs + 1] = { key = k, count = merged[k] } end
-  return r, swapped
 end
 
 -- Fluids currently in the recipe tanks: { { tank, key, name, amount } }

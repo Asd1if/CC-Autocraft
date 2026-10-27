@@ -429,6 +429,11 @@ function M.progress(job)
   return total == 0 and 1 or done / total
 end
 
+-- What a grid slot is fetched by: tools exactly, the rest maybe as a substitute group.
+local function gridKey(r, g)
+  return g.tool and g.key or recipes.inputKey(r, g.key)
+end
+
 -- Puts n runs of a turtle recipe into the grid. On a shortfall everything placed goes back
 -- (reserved again) and it returns nil + message.
 local function fill(job, r, t, n)
@@ -436,13 +441,14 @@ local function fill(job, r, t, n)
   for i = 1, 9 do
     local g = r.grid[i]
     if g.key then
+      local key = gridKey(r, g)
       local need = g.tool and 1 or g.count * n
-      local moved = indexer.extract(g.key, need, t.name, M.TSLOT[i])
-      if not g.tool then unreserve(job, g.key, moved); placed[g.key] = (placed[g.key] or 0) + moved end
+      local moved = indexer.extract(key, need, t.name, M.TSLOT[i])
+      if not g.tool then unreserve(job, key, moved); placed[key] = (placed[key] or 0) + moved end
       if moved < need then
         M.clearTurtle(t, nil, "craft")
         for key, c in pairs(placed) do job.reserve[key] = (job.reserve[key] or 0) + c end
-        return nil, ("not enough %s (%d/%d)"):format(indexer.displayName(g.key), moved, need)
+        return nil, ("not enough %s (%d/%d)"):format(indexer.displayName(key), moved, need)
       end
     end
   end
@@ -460,7 +466,7 @@ local function runTurtle(job, s, t)
   local perRun = {}
   for i = 1, 9 do
     local g = r.grid[i]
-    if g.key then perRun[g.key] = (perRun[g.key] or 0) + (g.tool and 0 or g.count) end
+    if g.key then perRun[gridKey(r, g)] = (perRun[gridKey(r, g)] or 0) + (g.tool and 0 or g.count) end
   end
 
   M.clearTurtle(t)
@@ -513,7 +519,10 @@ local function runTurtle(job, s, t)
       if done < n then
         for i = 1, 9 do
           local g = r.grid[i]
-          if g.key and not g.tool then job.reserve[g.key] = (job.reserve[g.key] or 0) + g.count * (n - done) end
+          if g.key and not g.tool then
+            local key = gridKey(r, g)
+            job.reserve[key] = (job.reserve[key] or 0) + g.count * (n - done)
+          end
         end
       end
       left = left - done
@@ -528,7 +537,10 @@ local function runMachine(job, s)
   local io = s.io or M.machineIO(r)
   -- inputs are fed at most cfg.batch runs ahead of what came out
   local perRun, fed = {}, {}
-  for _, inp in ipairs(r.inputs) do perRun[inp.key] = (perRun[inp.key] or 0) + inp.count; fed[inp.key] = 0 end
+  for _, inp in ipairs(r.inputs) do
+    local key = recipes.inputKey(r, inp.key)
+    perRun[key] = (perRun[key] or 0) + inp.count; fed[key] = 0
+  end
   local batch = math.max(1, M.cfg.batch or 16)
   -- inputs stay in the machine when it is also the output (depot, basin); separate output
   -- blocks (multiblocks) give everything back
