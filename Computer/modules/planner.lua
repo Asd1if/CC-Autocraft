@@ -112,7 +112,8 @@ function M.plan(target, qty, avail, recipes, points)
     pushStep(step)
     for _, o in ipairs(r.outputs) do
       local amt = o.count * runs
-      if o.key == k or o.key .. "#*" == k then amt = amt - q end
+      if recipes.matches and recipes.matches(o.key, k) then amt = math.max(0, amt - q); q = 0
+      elseif not recipes.matches and (o.key == k or o.key .. "#*" == k) then amt = amt - q end
       if amt > 0 then addVirtual(o.key, step, amt) end
     end
     return { recipe = r, runs = runs, step = step }, children, missing

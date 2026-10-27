@@ -2,7 +2,9 @@
 --
 -- Keys: items are "name" or "name#nbt" (crafting tells NBT variants apart),
 --       "name#*" matches any NBT variant (tools whose damage changes NBT),
---       fluids are "~name" (so minecraft:water the fluid never clashes with an item id).
+--       fluids are "~name" (so minecraft:water the fluid never clashes with an item id),
+--       "@tag" is any item of that tag (recipe inputs from cfg.substitutes: "@minecraft:planks").
+--       Tags of stored items are learned with their display names (data/tags.json).
 -- live_stock (M.stockList) merges NBT variants by name, as agreed.
 --
 -- Two pools: the main storage (what the player sees and takes from) and the craft storage
@@ -18,15 +20,55 @@ local M = {
   tanks = {},   -- tank name -> tanks() result
   agg = nil,    -- cached aggregate, rebuilt when dirty
   names = {},   -- item id -> display name
+  tags = {},    -- item id -> { tag = true }, learned once (getItemDetail is slow)
   dirty = true,
 }
 
 local NAMES_FILE = "data/names.json"
+local TAGS_FILE = "data/tags.json"
 
 function M.itemKey(name, nbt) return nbt and (name .. "#" .. nbt) or name end
 function M.fluidKey(name) return "~" .. name end
 function M.isFluid(key) return key:sub(1, 1) == "~" end
 function M.anyKey(name) return name .. "#*" end
+function M.isTag(key) return key:sub(1, 1) == "@" end
+function M.tagKey(tag) return "@" .. tag end
+
+-- Remembers an item's tags: { [tag] = true } as getItemDetail gives them.
+function M.learnTags(name, tags)
+  local set = {}
+  for t, v in pairs(tags or {}) do if v then set[t] = true end end
+  M.tags[name] = set
+end
+
+-- The cfg.substitutes tag an item stands for in recipes (first match in config order), or nil.
+function M.substituteTag(name)
+  local set = M.tags[name] or {}
+  for _, t in ipairs(M.cfg and M.cfg.substitutes or {}) do
+    if set[t] then return t end
+  end
+end
+
+-- Item ids known to carry `tag`, most in storage first.
+function M.tagMembers(tag)
+  local list = {}
+  for name, set in pairs(M.tags) do if set[tag] then list[#list + 1] = name end end
+  local by = M.agg and M.agg.byName or {}
+  table.sort(list, function(a, b)
+    if (by[a] or 0) ~= (by[b] or 0) then return (by[a] or 0) > (by[b] or 0) end
+    return a < b
+  end)
+  return list
+end
+
+-- Whether an item key belongs to a wanted key: the same, "name#*", or "@tag".
+function M.matches(key, wanted)
+  if key == wanted then return true end
+  local name = M.parseKey(key)
+  if wanted == name .. "#*" then return true end
+  if M.isTag(wanted) then return (M.tags[name] or {})[wanted:sub(2)] == true end
+  return false
+end
 
 -- key -> name, nbt, isFluid
 function M.parseKey(key)
@@ -37,6 +79,7 @@ function M.parseKey(key)
 end
 
 function M.displayName(key)
+  if M.isTag(key) then return "Any " .. util.formatName(key:sub(2)):lower() end
   local name, nbt, fluid = M.parseKey(key)
   local d = M.names[name] or util.formatName(name)
   if nbt and nbt ~= "*" then d = d .. "*" end
@@ -46,6 +89,7 @@ end
 function M.init(cfg, extraExclude)
   M.cfg = cfg
   M.names = util.readJSON(NAMES_FILE) or {}
+  M.tags = util.readJSON(TAGS_FILE) or {}
   local ex = util.set(cfg.exclude)
   if cfg.encoder then ex[cfg.encoder] = true end
   for _, n in ipairs(cfg.recipe_tanks or {}) do ex[n] = true end
@@ -140,6 +184,11 @@ end
 function M.count(key)
   local a = aggregate()
   if M.isFluid(key) then return a.fluids[key] or 0 end
+  if M.isTag(key) then
+    local n = 0
+    for _, name in ipairs(M.tagMembers(key:sub(2))) do n = n + (a.byName[name] or 0) end
+    return n
+  end
   local name, nbt = M.parseKey(key)
   if nbt == "*" then return a.byName[name] or 0 end
   return a.counts[key] or 0
@@ -190,6 +239,23 @@ end
 -- Moves up to `count` of an item key from storage into inventory `to` (optional slot).
 -- Craft storage first. Returns moved amount.
 function M.extract(key, count, to, toSlot)
+  if M.isTag(key) then
+    -- one kind per slot (a crafting slot can't hold oak and spruce); any mix without a slot
+    local moved = 0
+    for _, name in ipairs(M.tagMembers(key:sub(2))) do
+      if moved >= count then break end
+      if not toSlot or (aggregate().byName[name] or 0) >= count then
+        moved = moved + M.extract(name, count - moved, to, toSlot)
+        if toSlot and moved > 0 then break end
+      end
+    end
+    if toSlot and moved == 0 then
+      -- no single kind has enough: take the biggest pile, the caller sees the shortfall
+      local first = M.tagMembers(key:sub(2))[1]
+      if first then moved = M.extract(first, count, to, toSlot) end
+    end
+    return moved
+  end
   local moved = M.extractCached(key, count, to, toSlot)
   if moved < count then
     -- the cached slot lists may be stale (something moved items meanwhile): rescan, retry once
@@ -291,6 +357,13 @@ end
 -- Moves up to n of a key from the main storage into the craft storage. Returns moved amount.
 function M.stage(key, n)
   local moved = 0
+  if M.isTag(key) then
+    for _, name in ipairs(M.tagMembers(key:sub(2))) do
+      if moved >= n then break end
+      moved = moved + M.stage(name, n - moved)
+    end
+    return moved
+  end
   if M.isFluid(key) then
     for _, ct in ipairs(M.craftTanks) do
       for _, mt in ipairs(M.tankNames) do
@@ -342,14 +415,15 @@ function M.learnNames(maxPerCall)
   for _, inv in ipairs(itemSources()) do
     for slot, it in pairs(M.invs[inv] or {}) do
       if learned >= (maxPerCall or 8) then break end
-      if not M.names[it.name] then
+      if not M.names[it.name] or not M.tags[it.name] then
         local ok, d = pcall(peripheral.call, inv, "getItemDetail", slot)
         M.names[it.name] = ok and d and d.displayName or util.formatName(it.name)
+        M.learnTags(it.name, ok and d and d.tags)
         learned = learned + 1
       end
     end
   end
-  if learned > 0 then util.writeJSON(NAMES_FILE, M.names) end
+  if learned > 0 then util.writeJSON(NAMES_FILE, M.names); util.writeJSON(TAGS_FILE, M.tags) end
   return learned
 end
 

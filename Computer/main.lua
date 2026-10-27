@@ -15,7 +15,7 @@ util.installDefaults("defaults", "data") -- first start: config.lua, multiblock.
 local cfg = util.loadConfig({
   text_scale = 1, storage = { "create:item_vault" }, tanks = { "create:fluid_tank" },
   exclude = {}, recipe_tanks = {}, craft_timeout = 60, rescan = 10, batch = 16, clipboard_skip_checked = true,
-  craft_storage = {}, craft_tanks = {}, pools = {}, restock = {}, restock_interval = 30, debug = false,
+  craft_storage = {}, craft_tanks = {}, pools = {}, restock = {}, restock_interval = 30, debug = false, substitutes = {},
   recipe_tanks = {},
 })
 log.file = "data/autocraft.log"
@@ -41,6 +41,7 @@ executor.init(cfg, multiblocks)
 encoder.init(cfg)
 screen.init(cfg, multiblocks)
 executor.deliverFluid = encoder.deliverFluid
+recipes.matches, recipes.tagMembers = indexer.matches, indexer.tagMembers
 local hasTankMonitor = tankpanel.init(cfg, screen.monName)
 executor.restore() -- orders that were unfinished when the PC stopped
 log.info("%d recipes, %d item types", #recipes.list, indexer.totals().types)

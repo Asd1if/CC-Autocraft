@@ -1,82 +1,73 @@
-# Autocraft
+# CC-Autocraft
 
-Склад и автокрафт на CC: Tweaked (Minecraft 1.21.1, NeoForge) для Create и GregTech CEu: склад на монитор, кодирование рецептов тестовым крафтом, дерево крафта, очередь заказов, черепашки и машины. В папке [Mod](Mod) — аддон для EMI/JEI, который выкладывает рецепт в бочку-кодировщик.
+**English** | [Русский](README.ru.md)
 
-## Установка
-- Содержимое `Computer/` скопировать на ПК склада (`startup.lua` в корень диска или в любую папку)
-- Обновление — так же, копировать `Computer/` поверх. Папки `data/` в `Computer/` нет: рецепты, конфиг, очередь заказов и названия лежат только на ПК и не перезаписываются. При первом запуске `config.lua` и `multiblock.json` копируются в `data/` из `defaults/`
-- При каждом сохранении рецептов прошлая версия остаётся в `data/recipes.json.bak`; если `recipes.json` пропал, рецепты загрузятся из неё
-- Содержимое `Turtle/` скопировать на черепашку с верстаком
+Storage and autocrafting for CC: Tweaked (Minecraft 1.21.1, NeoForge), built for Create and GregTech CEu. One computer with a monitor runs the storage and the crafting:
 
-## Подключение
-- ПК: проводной модем к хранилищам, танкам, бочке-кодировщику, машинам и черепашке; монитор
-- Черепашка: верстак и проводной модем в той же сети (кольцо модема должно гореть красным). Сама объявляет себя, настраивать ничего не нужно
-- Команды черепашке идут по тому же кабелю (rednet работает и по проводным модемам). Беспроводные модемы не нужны; если они есть, сообщения пойдут и по ним
-- Если ответ не пришёл за 3 с, ПК повторяет запрос с тем же id; черепашка на повтор отвечает сохранённым ответом и не крафтит второй раз
+- the stock list on a monitor, with search, sorting, items and fluids;
+- recipes are encoded by a **test craft**: lay the recipe into a barrel, pick turtle / machine / multiblock / machine pool, and the computer measures what was consumed and produced;
+- a **craft tree** for any amount, with what is in stock, what will be crafted and what is missing;
+- an **order queue** (FIFO, saved across restarts) where steps run in parallel on free turtles and machines;
+- crafty turtles for crafting-table recipes, any Create / GregTech machine for the rest;
+- tools that wear out (hammers, wrenches) are planned by durability;
+- **tag substitutes**: a recipe encoded with oak planks takes any planks;
+- auto-restock, Create clipboard orders, a small tank monitor for the encoder.
 
-## data/config.lua (на ПК)
-Lua-таблица с разделами и комментариями по-русски: все ключи описаны прямо в файле. Разделы: экран, сеть, отладка, основной склад, склад крафта, кодировщик, заказ по clipboard, крафт, сканирование.
+The [Mod](Mod) folder holds an EMI/JEI addon that lays a recipe from the recipe viewer into the encoder barrel (Fabric 1.20.1 / 1.21.1, Forge 1.20.1, NeoForge 1.21.1).
 
-Старый `data/config.json` тоже читается, если `config.lua` нет.
-
-Ключи, которых нет в `data/config.lua`, берутся из `defaults/config.lua` — так новые настройки после обновления работают сразу. Но значения, заданные в `data/config.lua`, главнее: менять настройки нужно там.
-
-`debug = false` (по умолчанию): в `data/autocraft.log` попадают только предупреждения и ошибки. `debug = true` — полный лог: старт, заказы, шаги и всё, что выводилось в терминал.
-
-### Склад крафта
-`craft_storage = { "create:item_vault_2" }` (и `craft_tanks` для жидкостей) — отдельные хранилища для идущих заказов:
-- имена отсюда исключаются из основного склада, даже если `storage` задан типом;
-- при старте заказа всё, что он берёт со склада, переносится сюда, промежуточные предметы тоже кладутся сюда — руками их не забрать;
-- готовый результат последнего шага идёт в основной склад;
-- когда ни одного заказа нет (и при запуске ПК), всё оставшееся возвращается в основной склад;
-- в списке на мониторе склад крафта не показывается, но для расчёта крафта учитывается.
-
-### Пулы машин
-```lua
-pools = { panel = { "create:mechanical_press_0", "create:mechanical_press_1" } },
+## Install
+Run in game, on the storage computer and on each crafty turtle (the installer detects turtles):
 ```
-Машины пула пропадают из списка в ADD, вместо них пункт **Pool → panel**. Рецепт тестируется на первой машине, при крафте шаг делится поровну между свободными машинами пула. Можно указывать и мультиблоки из `multiblock.json`.
-
-### Автопополнение
-```lua
-restock = { ["create:andesite_alloy"] = 256 },
-restock_interval = 30,
+wget run https://raw.githubusercontent.com/Asd1if/CC-Autocraft/main/install.lua
 ```
-Когда заказов нет, раз в `restock_interval` секунд первый предмет ниже минимума заказывается — сколько хватает ресурсов.
+The same command updates. `data/` (recipes, config, queue) is never touched. Manual install: copy `Computer/` onto the computer and `Turtle/` onto the turtle.
 
-## data/multiblock.json
-```json
-{
-  "mixer_line": {
-    "input_item": "create:depot_1",
-    "output_item": "create:depot_2",
-    "input_fluid": "create:fluid_tank_4",
-    "output_fluid": "create:fluid_tank_5"
-  }
-}
+The first start copies `defaults/config.lua` and `defaults/multiblock.json` into `data/`. Edit `data/config.lua`: it is a Lua table where every key is commented (in Russian).
+
+## Wiring
 ```
-Обязателен только `input_item`. Без выходов результат ищется во входном блоке.
+             wired modem network (one cable)
+ ┌───────────┬──────────┬──────────┬───────────┬──────────┬──────────┐
+ Computer   storage    fluid      encoder     machines   crafty
+ + monitor  (vaults)   tanks      barrel +    (Create,   turtle(s)
+                                  recipe      GregTech)  + wired modem
+                                  tanks
+```
+- The computer and every block it uses sit on one wired modem network. Right-click each modem so its ring turns red.
+- Turtles take commands over the same cable (rednet works on wired modems). Wireless modems are optional.
+- A turtle announces itself, there is nothing to configure. Several turtles work in parallel on different steps.
+- A second small monitor (1x1 is enough) shows the encoder tanks and drains them into storage.
 
-## Монитор
-- Поиск: нажать **S** на клавиатуре ПК и ввести текст в терминале (часть названия или id). Enter без текста — показать всё. Строка «Search: …» над списком сбрасывает поиск по нажатию
-- Очередь заказов — до 3 строк над списком: зелёный — готово (10 с), жёлтый — крафтится сейчас, оранжевый — следующий, красный — после него. `+` перед названием — заказ автопополнения. Заказы выполняются по одному
-- Нажать на строку очереди или на полосу прогресса — дерево этого заказа (а не пересчёт выбранного предмета)
-- **Q** на клавиатуре ПК — отменить текущий заказ (или первый в очереди): шаги останавливаются, резерв снимается, всё из машин и склада крафта возвращается на склад
-- Сообщения о заказах (поставлен, готов, не хватает, упал) — в терминале ПК рамками, нехватка в виде `id > количество`
-- Незавершённые заказы сохраняются в `data/jobs.lua` и после перезапуска ПК планируются заново от того, что уже есть на складе
-- Нажать на предмет — слева появится дерево крафта
-- `< << ][ >> >` — −1, −10, заказ, +10, +1. `[N]` — максимум возможного
-- У выбранного предмета с рецептом `+` в списке становится красным `-`: первое нажатие спрашивает, второе в течение 5 с удаляет рецепт, по которому строится дерево. Если рецептов несколько, его место займёт следующий
-- Жидкости: счётчик начинается с 1B и шагает по 100 mB / 1B. Заказанная жидкость (со склада или скрафченная) наливается в танки кодировки: сначала в танк с той же жидкостью, потом в пустой. Не влезло — остаток на складе, сообщение в терминале
-- Иконки: сортировка (по количеству или по возможности крафта), предметы/жидкости, страницы
-- `[Clip]` справа внизу: читает clipboard Create (Material Checklist пушки схем) через Block Reader из Advanced Peripherals. Дерево строится на весь список, счётчик умножает его, `][` заказывает
-- ADD: Turtle / Machine / Multiblock → мод → машина → id → тестовый крафт. Если в танках рецепта есть жидкости, количество спрашивается в терминале компьютера: `water: 4B > 250` — число в mB, `1b` = 1000, Enter — пропустить жидкость
+## Encoding a recipe
+1. Lay one craft into the barrel grid: slots 4,5,6 / 13,14,15 / 22,23,24 (the middle 3x3 of a 27-slot barrel), and fluids into the recipe tanks.
+2. On the monitor press **ADD**, then Turtle / Machine / Multiblock / Pool, then the machine.
+3. The test runs once, the results come back to the barrel (slot 14 first), and the recipe is saved.
 
-## Монитор танков (второй, хватит 1x1)
-Ставится рядом с кодировщиком, масштаб текста 0.5 выставляется сам (15x10 символов). Строка на танк: `[1]> Water:40mB`, название в цвете жидкости. Нажатие на строку — слить этот танк в склад, оранжевая полоса `All > storage` внизу — слить все. Обновляется раз в 2 с и при каждом пересканировании склада. В конфиге `encoder_monitor` (nil — любой монитор, кроме основного). Если `monitor = nil`, основным считается самый большой монитор.
+Items carrying a tag from `substitutes` in the config become "any item of that tag". Keep that list to tags that don't change the result: planks yes, logs no (a spruce log gives spruce planks).
 
-## Если что-то упало
-Основные циклы ПК (экран, сеть, склад, очередь, монитор танков) при ошибке перезапускаются сами (не больше 5 раз в минуту). Ошибка пишется в `data/autocraft.log` вместе со стеком — пришлите этот кусок лога.
+## Monitor
+- Tap an item to see its craft tree. `< << ][ >> >` is −1, −10, order, +10, +1, and `[N]` is the most you can make.
+- An order always crafts the ordered item, even if storage has some. Ingredients come from storage, and so do fluids and items without a recipe.
+- On the selected item with a recipe, `+` turns into a red `-`. Tap it twice within 5 s to delete that recipe.
+- The queue shows on top of the list: green is done, yellow is crafting, orange is next, red is later. Tap a row to see its tree.
+- **S** on the computer's keyboard searches; **Q** cancels the running order.
+- `[Clip]` reads a Create clipboard (Material Checklist) through an Advanced Peripherals Block Reader and orders the whole list.
+- Messages (order placed, done, missing items, failures) are printed in the computer's terminal.
 
-## Лицензия
+## Config highlights (`data/config.lua`)
+| Key | What |
+|---|---|
+| `storage`, `tanks` | storage inventories / tanks: a type (`create:item_vault`) or exact names |
+| `craft_storage`, `craft_tanks` | separate storage for running orders, so the player can't take their items |
+| `encoder`, `recipe_tanks` | the encoder barrel and its fluid tanks |
+| `pools` | several identical machines under one name, a step is split between them |
+| `restock` | minimum stock that is crafted automatically when nothing else runs |
+| `substitutes` | tags that encode as "any item of the tag" |
+| `batch` | crafts per turtle call / machine load-ahead (default 16) |
+| `debug` | full log in `data/autocraft.log` (otherwise warnings and errors only) |
+
+## When something breaks
+The main loops (screen, network, storage, queue, tank monitor) restart after an error, at most 5 times a minute. The error and its stack go to `data/autocraft.log`. Please attach that part of the log to an issue.
+
+## License
 [MIT](LICENSE)

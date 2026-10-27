@@ -68,14 +68,29 @@ function M.mainKey(r)
   return r.outputs[1] and r.outputs[1].key
 end
 
--- How many `key` one run of r produces.
+-- Tag support, set by main.lua (indexer.matches / indexer.tagMembers): without it only exact
+-- keys and "name#*" match.
+M.matches = function(key, wanted) return key == wanted or key .. "#*" == wanted end
+M.tagMembers = function() return {} end
+
+-- How many `key` one run of r produces ("@tag": every output of that tag).
 function M.yield(r, key)
   local n = 0
-  for _, o in ipairs(r.outputs) do if o.key == key or o.key .. "#*" == key then n = n + o.count end end
+  for _, o in ipairs(r.outputs) do if M.matches(o.key, key) then n = n + o.count end end
   return n
 end
 
 function M.forOutput(key)
+  if key:sub(1, 1) == "@" then
+    -- recipes of every member, the most stocked kind first
+    local list = {}
+    for _, name in ipairs(M.tagMembers(key:sub(2))) do
+      for _, r in ipairs(M.byOutput[name] or {}) do
+        if M.mainKey(r) == name then list[#list + 1] = r end
+      end
+    end
+    return list
+  end
   local name, any = key:match("^(.+)#(%*)$")
   if any then return M.byOutput[name] or {} end
   return M.byOutput[key] or {}

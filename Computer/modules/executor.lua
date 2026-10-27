@@ -170,13 +170,19 @@ end
 -- Moves everything that isn't a recipe input out of a machine into storage: main outputs,
 -- chance byproducts the test didn't see, NBT variants, leftovers of an earlier step.
 -- Machines belong to autocraft, so nothing in their output is the player's. Returns key -> moved.
+local function isInput(inKeys, k)
+  if inKeys[k] then return true end
+  for key in pairs(inKeys) do if indexer.matches(k, key) then return true end end
+  return false
+end
+
 local function collect(io, inKeys, pool)
   local got = {}
   local ok, list = pcall(peripheral.call, io.outItem, "list")
   if ok and list then
     for slot, it in pairs(list) do
       local k = itemKey(it)
-      if not inKeys[k] then
+      if not isInput(inKeys, k) then
         local n = indexer.insert(io.outItem, slot, it.count, it.name, pool)
         if n > 0 then got[k] = (got[k] or 0) + n end
       end

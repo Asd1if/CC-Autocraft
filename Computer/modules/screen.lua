@@ -27,6 +27,7 @@ local planner  = require("modules.planner")
 local executor = require("modules.executor")
 local encoder  = require("modules.encoder")
 local clipboard = require("modules.clipboard")
+local console  = require("modules.console")
 
 local M = {}
 
@@ -476,6 +477,8 @@ local function finishRecipe(draft)
     S.panel = nil
   end
   if #draft.outputs == 0 then message("No result detected", C.err); S.panel = nil return end
+  local _, swapped = encoder.applyTags(draft)
+  if #swapped > 0 then console.block("Any item of a tag (data/config.lua: substitutes)", colors.cyan, swapped) end
   if #draft.outputs == 1 then return save(draft.outputs[1].key) end
   -- several results: pick the main one (others are kept as byproducts)
   S.panel = {
