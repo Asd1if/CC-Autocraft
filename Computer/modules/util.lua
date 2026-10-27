@@ -120,10 +120,24 @@ local function readLuaConfig(path)
   return fn()
 end
 
+-- Old key names (and common misspellings) still read: new name <- old names.
+local RENAMED = {
+  main_monitor = { "monitor" },
+  fluid_monitor = { "encoder_monitor", "flued_monitor" },
+  main_TextScale = { "text_scale" },
+  rednet_modem = { "modem" },
+  debug_mode = { "debug", "dedug_mode" },
+}
+
 -- data/config.lua; keys it lacks come from defaults/config.lua (new keys after an update),
 -- then from `defaults`.
 function util.loadConfig(defaults)
   local cfg = readLuaConfig("data/config.lua") or util.readJSON("data/config.json") or {}
+  for new, olds in pairs(RENAMED) do
+    for _, old in ipairs(olds) do
+      if cfg[new] == nil and cfg[old] ~= nil then cfg[new] = cfg[old] end
+    end
+  end
   local shipped = readLuaConfig("defaults/config.lua") or {}
   for _, layer in ipairs({ shipped, defaults or {} }) do
     for k, v in pairs(layer) do

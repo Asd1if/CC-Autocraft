@@ -125,10 +125,10 @@ function M.refresh()
   M.draw()
 end
 
--- cfg.encoder_monitor, or the first monitor that is not the main one. Returns false if none.
+-- cfg.fluid_monitor, or the first monitor that is not the main one. Returns false if none.
 function M.init(cfg, mainMonitor)
   M.cfg = cfg
-  M.name = cfg.encoder_monitor
+  M.name = cfg.fluid_monitor
   if not M.name then
     for _, n in ipairs(peripheral.getNames()) do
       if peripheral.getType(n) == "monitor" and n ~= mainMonitor then M.name = n break end
@@ -136,7 +136,7 @@ function M.init(cfg, mainMonitor)
   end
   mon = M.name and peripheral.wrap(M.name)
   if not mon then return false end
-  if mon.setTextScale then mon.setTextScale(0.5) end
+  if mon.setTextScale then mon.setTextScale(cfg.fluid_TextScale or 0.5) end
   W, H = mon.getSize()
   log.info("tank monitor: %s", M.name)
   return true

@@ -54,17 +54,29 @@ Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item
 - `[Clip]` reads a Create clipboard (Material Checklist) through an Advanced Peripherals Block Reader and orders the whole list.
 - Messages (order placed, done, missing items, failures) are printed in the computer's terminal.
 
-## Config highlights (`data/config.lua`)
+## Config (`data/config.lua`)
 | Key | What |
 |---|---|
+| `main_monitor` | main monitor name; `nil` = the biggest monitor |
+| `fluid_monitor` | small monitor for the encoder tanks; `nil` = any other monitor, none = no panel |
+| `main_TextScale`, `fluid_TextScale` | text scale of the two monitors (0.5 fits more) |
+| `clipboard_reader` | Block Reader in front of the Create clipboard; `nil` = the first found |
+| `clipboard_skip_checked` | ticked clipboard lines are not ordered |
+| `rednet_modem` | modem for turtle commands; `nil` = every modem (the wired one is enough) |
+| `debug_mode` | full log in `data/autocraft.log`; otherwise warnings and errors only |
+| `craft_timeout` | seconds a machine may sit idle before the order fails |
+| `batch` | crafts per turtle call / machine load-ahead |
+| `restock_interval` | seconds between auto-restock checks |
+| `rescan` | seconds between full storage rescans |
 | `storage`, `tanks` | storage inventories / tanks: a type (`create:item_vault`) or exact names |
-| `craft_storage`, `craft_tanks` | separate storage for running orders, so the player can't take their items |
+| `exclude` | names that match the lists above but aren't storage |
+| `craft_storage`, `craft_tanks` | separate storage for running orders (exact names); empty = off |
 | `encoder`, `recipe_tanks` | the encoder barrel and its fluid tanks |
 | `pools` | several identical machines under one name, a step is split between them |
-| `restock` | minimum stock that is crafted automatically when nothing else runs |
+| `restock` | `[item] = minimum`, crafted automatically when nothing else runs |
 | `substitutes` | groups of interchangeable items, see below |
-| `batch` | crafts per turtle call / machine load-ahead (default 16) |
-| `debug` | full log in `data/autocraft.log` (otherwise warnings and errors only) |
+
+Old key names (`monitor`, `encoder_monitor`, `text_scale`, `modem`, `debug`) are still read. Keys missing from `data/config.lua` come from `defaults/config.lua`.
 
 ## Substitute groups
 ```lua

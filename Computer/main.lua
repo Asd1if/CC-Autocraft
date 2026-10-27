@@ -13,16 +13,16 @@ local tankpanel = require("modules.tankpanel")
 util.installDefaults("defaults", "data") -- first start: config.lua, multiblock.json
 
 local cfg = util.loadConfig({
-  text_scale = 1, storage = { "create:item_vault" }, tanks = { "create:fluid_tank" },
+  main_TextScale = 1, fluid_TextScale = 0.5, storage = { "create:item_vault" }, tanks = { "create:fluid_tank" },
   exclude = {}, recipe_tanks = {}, craft_timeout = 60, rescan = 10, batch = 16, clipboard_skip_checked = true,
   craft_storage = {}, craft_tanks = {}, pools = {}, restock = {}, restock_interval = 30, debug = false, substitutes = {},
   recipe_tanks = {},
 })
 log.file = "data/autocraft.log"
-log.level = cfg.debug and 1 or 3 -- not debug: only WARN and ERROR reach the file
+log.level = cfg.debug_mode and 1 or 3 -- not debug: only WARN and ERROR reach the file
 log.info("autocraft starting")
 
-net.open(cfg.modem) -- nil: every modem, the wired one is enough
+net.open(cfg.rednet_modem) -- nil: every modem, the wired one is enough
 
 local multiblocks = util.readJSON("data/multiblock.json") or {}
 local mbParts = {}

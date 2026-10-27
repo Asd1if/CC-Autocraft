@@ -780,7 +780,7 @@ end
 function M.init(cfg, multiblocks)
   M.cfg = cfg
   M.multiblocks = multiblocks or {}
-  M.monName = cfg.monitor
+  M.monName = cfg.main_monitor
   if not M.monName then
     -- the biggest monitor: a small one may be the encoder's tank panel
     local best = 0
@@ -793,7 +793,7 @@ function M.init(cfg, multiblocks)
     if not M.monName then error("no monitor", 0) end
   end
   mon = peripheral.wrap(M.monName) or error("monitor not found: " .. M.monName, 0)
-  if mon.setTextScale then mon.setTextScale(cfg.text_scale or 1) end
+  if mon.setTextScale then mon.setTextScale(cfg.main_TextScale or 1) end
   mon.setCursorBlink(false)
   layout()
   clipboard.init(cfg)
