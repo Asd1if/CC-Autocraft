@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "JEI/EMI recipe transfer into a barrel-encoder grid (slots 4,5,6 / 13,14,15 / 22,23,24).",
+  "authors": ["Asd1if"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.autocraft.barrelgrid.platform.BarrelGridFabric"],
+    "client": ["dev.autocraft.barrelgrid.platform.BarrelGridFabricClient"],
+    "jei_mod_plugin": ["dev.autocraft.barrelgrid.jei.BarrelJeiPlugin"],
+    "emi": ["dev.autocraft.barrelgrid.emi.BarrelEmiPlugin"]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.21",
+    "fabric-api": "*",
+    "minecraft": "~1.20.1",
+    "java": ">=17"
+  },
+  "suggests": {
+    "jei": "*",
+    "emi": "*"
+  }
+}

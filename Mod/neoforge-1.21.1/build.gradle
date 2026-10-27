@@ -1,0 +1,7 @@
+dependencies {
+    neoForge "net.neoforged:neoforge:${rootProject.neoforge_version}"
+
+    modCompileOnly "mezz.jei:jei-1.21.1-common-api:${rootProject.jei_1211}"
+    modCompileOnly "mezz.jei:jei-1.21.1-neoforge-api:${rootProject.jei_1211}"
+    modCompileOnly "dev.emi:emi-neoforge:${rootProject.emi_1211}:api"
+}

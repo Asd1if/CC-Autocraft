@@ -1,0 +1,6 @@
+{
+  "barrelgrid.message.missing": "Не хватает предметов в инвентаре",
+  "barrelgrid.message.no_server": "Barrel Grid Transfer не установлен на сервере",
+  "barrelgrid.message.not_storage": "Это хранилище не кодировщик (см. config/barrelgrid.json)",
+  "barrelgrid.message.fluid": "В рецепте есть жидкость (ignore_fluids выключен)"
+}

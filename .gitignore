@@ -1,0 +1,15 @@
+# game data written at runtime (recipes, config, logs live on the in-game PC)
+data/
+*.log
+# offline tests stay local
+tests/
+out.json
+__pycache__/
+# addon build output
+Mod/.gradle/
+Mod/**/build/
+Mod/**/.gradle/
+Mod/**/run/
+.idea/
+*.iml
+.vscode/

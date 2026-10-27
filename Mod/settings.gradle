@@ -1,0 +1,15 @@
+pluginManagement {
+    repositories {
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.architectury.dev/' }
+        maven { url = 'https://files.minecraftforge.net/maven/' }
+        maven { url = 'https://maven.neoforged.net/releases/' }
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'barrelgrid'
+
+// Одна сборка, четыре цели. Общий код лежит в shared/ (одинаковый для всех версий)
+// и common-<mc>/ (отличается между 1.20.1 и 1.21.1); подпроекты компилируют его к себе.
+include 'fabric-1.21.1', 'neoforge-1.21.1', 'fabric-1.20.1', 'forge-1.20.1'

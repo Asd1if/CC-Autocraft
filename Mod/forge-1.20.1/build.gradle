@@ -1,0 +1,7 @@
+dependencies {
+    forge "net.minecraftforge:forge:${rootProject.forge_version}"
+
+    modCompileOnly "mezz.jei:jei-1.20.1-common-api:${rootProject.jei_1201}"
+    modCompileOnly "mezz.jei:jei-1.20.1-forge-api:${rootProject.jei_1201}"
+    modCompileOnly "dev.emi:emi-forge:${rootProject.emi_1201}:api"
+}

@@ -1,0 +1,6 @@
+{
+  "barrelgrid.message.missing": "Not enough items in your inventory",
+  "barrelgrid.message.no_server": "Barrel Grid Transfer is not installed on the server",
+  "barrelgrid.message.not_storage": "This storage is not an encoder (see config/barrelgrid.json)",
+  "barrelgrid.message.fluid": "Recipe needs a fluid (ignore_fluids is off)"
+}

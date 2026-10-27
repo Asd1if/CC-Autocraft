@@ -1,0 +1,8 @@
+dependencies {
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_1201}"
+
+    modCompileOnly "mezz.jei:jei-1.20.1-common-api-intermediary:${rootProject.jei_1201}"
+    modCompileOnly "mezz.jei:jei-1.20.1-fabric-api:${rootProject.jei_1201}"
+    modCompileOnly "dev.emi:emi-fabric:${rootProject.emi_1201}:api"
+}
