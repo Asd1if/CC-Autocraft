@@ -1,8 +1,10 @@
 -- CC-Autocraft installer / updater. Run on the computer or the turtle:
 --   wget run https://raw.githubusercontent.com/Asd1if/CC-Autocraft/main/install.lua
 -- Arguments: "computer" or "turtle" to skip the question, and optionally a branch.
--- Downloads Computer/ or Turtle/ from GitHub into the root of this computer. data/ (recipes,
--- config, queue) is never touched, so running it again is an update.
+-- Downloads Computer/ or Turtle/ from GitHub into the root of this computer. system/ is replaced
+-- as a whole; config.lua, data/ (recipes, queue, names) and mods/ (your own mods) are never
+-- touched, so running it again is an update. Files of the old layout (main.lua, modules/,
+-- defaults/) are removed; the first start moves an old data/config.lua to config.lua.
 local REPO = "Asd1if/CC-Autocraft"
 local args = { ... }
 local kind = args[1]
@@ -42,23 +44,34 @@ local files = {}
 for _, e in ipairs(tree.tree) do
   if e.type == "blob" and e.path:sub(1, #folder + 1) == folder .. "/" then
     local dest = e.path:sub(#folder + 2)
-    if dest:sub(1, 5) ~= "data/" then files[#files + 1] = { src = e.path, dest = dest } end
+    local top = dest:match("^[^/]+")
+    if top ~= "data" and top ~= "mods" and dest ~= "config.lua" then files[#files + 1] = { src = e.path, dest = dest } end
   end
 end
 if #files == 0 then error("no files found in " .. folder .. "/", 0) end
 
+-- download everything first: a failed download leaves the old install as it was
 for i, f in ipairs(files) do
   print(("[%d/%d] %s"):format(i, #files, f.dest))
-  local body = get(("https://raw.githubusercontent.com/%s/%s/%s"):format(REPO, branch, f.src))
+  f.body = get(("https://raw.githubusercontent.com/%s/%s/%s"):format(REPO, branch, f.src))
+end
+
+-- everything shipped earlier, so files removed from the repository don't linger
+local OLD = kind == "computer" and { "system", "main.lua", "modules", "defaults" } or { "main.lua" }
+for _, path in ipairs(OLD) do
+  if fs.exists(path) then fs.delete(path) end
+end
+
+for _, f in ipairs(files) do
   local dir = fs.getDir(f.dest)
   if dir ~= "" and not fs.exists(dir) then fs.makeDir(dir) end
   local h = fs.open(f.dest, "w")
-  h.write(body)
+  h.write(f.body)
   h.close()
 end
 
 print()
 print(("Installed %d files. Reboot to start (startup.lua)."):format(#files))
 if kind == "computer" then
-  print("First start copies defaults/ to data/: edit data/config.lua for your storage.")
+  print("Settings: config.lua (made on the first start). Your own mods go to mods/.")
 end

@@ -6,10 +6,10 @@
 -- to the barrel: results go to slot 14 first (the grid is empty by then), fluids to the tanks.
 -- Turtle tests also record the results' stack size (unstackable ones are crafted one by one)
 -- and tools: grid items that stay after the craft, maybe with less durability.
-local net      = require("modules.net")
-local indexer  = require("modules.indexer")
-local executor = require("modules.executor")
-local console  = require("modules.console")
+local net      = require("system.core.net")
+local indexer  = require("system.core.indexer")
+local executor = require("system.craft.executor")
+local console  = require("system.utils.console")
 
 local M = {}
 

@@ -8,10 +8,10 @@
 --   [All > storage]       (orange bar)
 --
 -- Redrawn every 2 s and on every storage rescan.
-local indexer = require("modules.indexer")
-local encoder = require("modules.encoder")
-local util    = require("modules.util")
-local log     = require("modules.log")
+local indexer = require("system.core.indexer")
+local encoder = require("system.craft.encoder")
+local util    = require("system.utils.util")
+local log     = require("system.utils.log")
 
 local M = { msg = nil, msgColor = colors.white, msgUntil = 0 }
 

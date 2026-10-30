@@ -14,14 +14,15 @@
 -- main storage; once no job is running the craft storage is emptied back.
 -- A fluid ordered with opts.deliver is poured into the encoder's recipe tanks when done
 -- (M.deliverFluid, set by main.lua to encoder.deliverFluid).
-local log     = require("modules.log")
-local console = require("modules.console")
-local net     = require("modules.net")
-local tasks   = require("modules.tasks")
-local indexer = require("modules.indexer")
-local recipes = require("modules.recipes")
-local planner = require("modules.planner")
-local util    = require("modules.util")
+local log     = require("system.utils.log")
+local console = require("system.utils.console")
+local net     = require("system.core.net")
+local tasks   = require("system.core.tasks")
+local indexer = require("system.core.indexer")
+local recipes = require("system.craft.recipes")
+local planner = require("system.craft.planner")
+local util    = require("system.utils.util")
+local api     = require("system.core.api")
 
 local M = { jobs = {}, nextId = 1, busy = {}, turtles = {}, mb = {}, pools = {}, nextRestock = 0 }
 
@@ -169,7 +170,8 @@ end
 
 -- Moves everything that isn't a recipe input out of a machine into storage: main outputs,
 -- chance byproducts the test didn't see, NBT variants, leftovers of an earlier step.
--- Machines belong to autocraft, so nothing in their output is the player's. Returns key -> moved.
+-- Machines belong to autocraft, so nothing in their output is the player's, except what a mod
+-- keeps there (api "machine.keep": a GregTech circuit). Returns key -> moved.
 local function isInput(inKeys, k)
   if inKeys[k] then return true end
   for key in pairs(inKeys) do if indexer.matches(k, key) then return true end end
@@ -182,7 +184,7 @@ local function collect(io, inKeys, pool)
   if ok and list then
     for slot, it in pairs(list) do
       local k = itemKey(it)
-      if not isInput(inKeys, k) then
+      if not isInput(inKeys, k) and not api.any("machine.keep", io.outItem, it) then
         local n = indexer.insert(io.outItem, slot, it.count, it.name, pool)
         if n > 0 then got[k] = (got[k] or 0) + n end
       end
@@ -363,6 +365,7 @@ local function finish(job, status)
     console.block(label .. ": failed", colors.red, { { job.error or "?" } })
   end
   M.save()
+  api.emit("order." .. status, job)
   M.cleaning = true
   tasks.spawn(function()
     if status == "done" and job.deliver then deliver(job, label) end
@@ -384,6 +387,7 @@ function M.cancel()
     target.status, target.reserve, target.ended = "cancelled", {}, os.clock()
     console.line(("x #%d %s cancelled"):format(target.id, M.label(target.key, target.qty)), colors.orange)
     M.save()
+    api.emit("order.cancelled", target)
   else
     target.cancelled, target.error = true, "cancelled"
     console.line(("x #%d %s: stopping..."):format(target.id, M.label(target.key, target.qty)), colors.orange)
@@ -647,7 +651,9 @@ local function drain(io)
   for _, inv in ipairs({ io.inItem, io.outItem }) do
     local ok, list = pcall(peripheral.call, inv, "list")
     if ok and list then
-      for slot, it in pairs(list) do indexer.insert(inv, slot, it.count, it.name, "craft") end
+      for slot, it in pairs(list) do
+        if not api.any("machine.keep", inv, it) then indexer.insert(inv, slot, it.count, it.name, "craft") end
+      end
     end
   end
   for _, tank in ipairs({ io.inFluid, io.outFluid }) do
@@ -663,6 +669,15 @@ end
 
 -- Which resource a step needs and whether it's free. Returns a claim or nil.
 -- A turtle step takes one free turtle, a pool step every free member (no more than it has runs).
+-- A machine step may run on more machines than the one it was tested on: mods say which
+-- (api "machine.workers": the same GregTech machine with the same circuit, a higher tier).
+-- With several it works like a pool.
+function M.workers(r)
+  if r.type == "pool" then return M.pools[r.machine] or {} end
+  if r.type == "machine" then return api.filter("machine.workers", { r.machine }, r) end
+  return { r.machine }
+end
+
 local function claimFor(s)
   local r = s.recipe
   if r.type == "turtle" then
@@ -670,9 +685,11 @@ local function claimFor(s)
     if not t then return nil end
     t.busy = true
     return { turtle = t }
-  elseif r.type == "pool" then
+  end
+  local workers = M.workers(r)
+  if r.type == "pool" or #workers > 1 then
     local got = {}
-    for _, name in ipairs(M.pools[r.machine] or {}) do
+    for _, name in ipairs(workers) do
       if #got >= s.runs then break end
       if not M.busy[busyKey(name)] then got[#got + 1] = name end
     end

@@ -11,18 +11,34 @@ Storage and autocrafting for CC: Tweaked (Minecraft 1.21.1, NeoForge), built for
 - crafty turtles for crafting-table recipes, any Create / GregTech machine for the rest;
 - tools that wear out (hammers, wrenches) are planned by durability;
 - **substitute groups**: a recipe encoded with oak planks takes any planks;
-- auto-restock, Create clipboard orders, a small tank monitor for the encoder.
+- auto-restock, a small tank monitor for the encoder;
+- **mods**: Create clipboard orders, GregTech circuits and tiers, and your own (see [MODS.md](MODS.md)).
 
-The [Mod](Mod) folder holds an EMI/JEI addon that lays a recipe from the recipe viewer into the encoder barrel (Fabric 1.20.1 / 1.21.1, Forge 1.20.1, NeoForge 1.21.1).
+Most machines of other mods work too: anything with one inventory the computer can reach. Create is fully covered except recipes that need items in two places at once (deployer hand + depot).
+
+The [CC-Autocraft_Mod](CC-Autocraft_Mod) folder holds an EMI/JEI addon that lays a recipe from the recipe viewer into the encoder barrel (Fabric 1.20.1 / 1.21.1, Forge 1.20.1, NeoForge 1.21.1).
 
 ## Install
 Run in game, on the storage computer and on each crafty turtle (the installer detects turtles):
 ```
 wget run https://raw.githubusercontent.com/Asd1if/CC-Autocraft/main/install.lua
 ```
-The same command updates. `data/` (recipes, config, queue) is never touched. Manual install: copy `Computer/` onto the computer and `Turtle/` onto the turtle.
+The same command updates: it replaces `system/` and never touches `config.lua`, `data/` or `mods/`. Manual install: copy `Computer/` onto the computer and `Turtle/` onto the turtle.
 
-The first start copies `defaults/config.lua` and `defaults/multiblock.json` into `data/`. Edit `data/config.lua`: it is a Lua table where every key is commented (in Russian).
+On the computer:
+```
+startup.lua      the program (runs on boot)
+config.lua       settings, made from system/default/config.lua on the first start
+data/            recipes, names, the order queue, the log, multiblock.json
+mods/            your own mods
+system/
+  default/       config and multiblock.json templates
+  core/          storage index, monitor, network, task scheduler, mod API and loader
+  craft/         recipes, planner, order queue, recipe encoder
+  mods/          shipped mods: create.lua, gtceu.lua
+  utils/         formatting, log, terminal messages
+```
+Edit `config.lua`: a Lua table where every key is commented (in Russian). An install from before this layout is moved over on the first start (`data/config.lua` becomes `config.lua`).
 
 ## Wiring
 ```
@@ -40,21 +56,21 @@ The first start copies `defaults/config.lua` and `defaults/multiblock.json` into
 
 ## Encoding a recipe
 1. Lay one craft into the barrel grid: slots 4,5,6 / 13,14,15 / 22,23,24 (the middle 3x3 of a 27-slot barrel), and fluids into the recipe tanks.
-2. On the monitor press **ADD**, then Turtle / Machine / Multiblock / Pool, then the machine.
+2. On the monitor press **ADD** (it also looks for newly connected machines), then Turtle / Machine / Multiblock / Pool, then the machine.
 3. The test runs once, the results come back to the barrel (slot 14 first), and the recipe is saved.
 
 Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item of the group" when planning and crafting, for old recipes too.
 
 ## Monitor
-- Tap an item to see its craft tree. `< << ][ >> >` is −1, −10, order, +10, +1, and `[N]` is the most you can make.
+- Tap an item to see its craft tree. `0/4 r3` means 3 more are in storage, but queued or running orders hold them. `< << ][ >> >` is −1, −10, order, +10, +1, and `[N]` is the most you can make.
 - An order always crafts the ordered item, even if storage has some. Ingredients come from storage, and so do fluids and items without a recipe.
 - On the selected item with a recipe, `+` turns into a red `-`. Tap it twice within 5 s to delete that recipe.
 - The queue shows on top of the list: green is done, yellow is crafting, orange is next, red is later. Tap a row to see its tree.
 - **S** on the computer's keyboard searches; **Q** cancels the running order.
-- `[Clip]` reads a Create clipboard (Material Checklist) through an Advanced Peripherals Block Reader and orders the whole list.
+- `[Clip]` (create mod) reads a Create clipboard (Material Checklist) through an Advanced Peripherals Block Reader and orders the whole list.
 - Messages (order placed, done, missing items, failures) are printed in the computer's terminal.
 
-## Config (`data/config.lua`)
+## Config (`config.lua`)
 | Key | What |
 |---|---|
 | `main_monitor` | main monitor name; `nil` = the biggest monitor |
@@ -75,8 +91,16 @@ Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item
 | `pools` | several identical machines under one name, a step is split between them |
 | `restock` | `[item] = minimum`, crafted automatically when nothing else runs |
 | `substitutes` | groups of interchangeable items, see below |
+| `mods_disabled` | mods to turn off, e.g. `{ "gtceu" }` |
+| `gtceu_tier_up` | a GregTech recipe tested on LV may run on MV, HV... (default `true`) |
+| `gtceu_chips` | extra circuit NBT hashes: `["<hash>"] = number` |
 
-Old key names (`monitor`, `encoder_monitor`, `text_scale`, `modem`, `debug`) are still read. Keys missing from `data/config.lua` come from `defaults/config.lua`.
+Old key names (`monitor`, `encoder_monitor`, `text_scale`, `modem`, `debug`) are still read. Keys missing from `config.lua` come from `system/default/config.lua`.
+
+## GregTech (gtceu mod)
+- **Circuits**: put the programmed circuit into the machine's input bus/inventory. A recipe remembers the circuit of the machine it was tested on, and every machine of the same kind with the same circuit runs it too: they share the work like a pool, no config needed. The circuit always stays in the machine.
+- **Tiers**: a recipe tested on an LV machine also runs on MV, HV... machines of the same kind and circuit (`gtceu_tier_up = false` turns it off). The tested machine goes first, then the lowest tiers.
+- The ADD menu shows tier and circuit next to each machine: `[ID-3] LV c5`.
 
 ## Substitute groups
 ```lua

@@ -11,8 +11,8 @@
 --              maxCount is the stack size seen in the test (1 = unstackable, crafted one by one)
 --   priority = 1 (lower = tried first), time = seconds measured in the test
 -- }
-local util = require("modules.util")
-local log  = require("modules.log")
+local util = require("system.utils.util")
+local log  = require("system.utils.log")
 
 local M = { list = {}, byOutput = {}, path = "data/recipes.json", backup = "data/recipes.json.bak" }
 
@@ -116,6 +116,20 @@ function M.turtleBatch(r, cap)
     batch = math.min(batch, math.floor((o.maxCount or 1) / o.count))
   end
   return math.max(1, batch)
+end
+
+-- Takes a compacted block apart: one input, more of the result than went in, and another
+-- recipe packs the result back into that input (iron block -> 9 ingots <- 9 ingots).
+function M.isUnpack(r)
+  if #r.inputs ~= 1 or r.grid and r.tools and #r.tools > 0 then return false end
+  local inKey, main = r.inputs[1].key, M.mainKey(r)
+  if not main or M.yield(r, main) <= r.inputs[1].count then return false end
+  for _, back in ipairs(M.byOutput[inKey] or {}) do
+    for _, inp in ipairs(back.inputs) do
+      if inp.key == main then return true end
+    end
+  end
+  return false
 end
 
 function M.hasRecipe(key)

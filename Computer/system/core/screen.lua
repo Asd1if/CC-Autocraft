@@ -10,24 +10,24 @@
 --  H-11 add menu       [sort]      |
 --  H-5 - - - - - -     [mode]      |
 --  H-4 A D D           [up]        |
---  H   A D D           [down]      |=  < << ][ >> > [N]      [Clip]
+--  H   A D D           [down]      |=  < << ][ >> > [N]   [mod buttons]
 --
--- [Clip] reads a Create clipboard through a Block Reader; the order is then the whole list
--- (the counter multiplies it).
+-- Mods add buttons to the right end of the bottom bar (api.button), e.g. [Clip] of the create
+-- mod. ADD also looks for new machines on the network (api.rediscover).
 -- Search: press S on the computer's keyboard and type in its terminal; the list shows only
 -- matching items, its first row "Search: ..." clears the filter when tapped.
 -- Queue: up to 3 rows on top of the list: green done, yellow crafting now, orange next,
 -- red after that. Q on the computer's keyboard cancels the running order.
-local util     = require("modules.util")
-local tasks    = require("modules.tasks")
-local log      = require("modules.log")
-local indexer  = require("modules.indexer")
-local recipes  = require("modules.recipes")
-local planner  = require("modules.planner")
-local executor = require("modules.executor")
-local encoder  = require("modules.encoder")
-local clipboard = require("modules.clipboard")
-local console  = require("modules.console")
+local util     = require("system.utils.util")
+local tasks    = require("system.core.tasks")
+local log      = require("system.utils.log")
+local indexer  = require("system.core.indexer")
+local recipes  = require("system.craft.recipes")
+local planner  = require("system.craft.planner")
+local executor = require("system.craft.executor")
+local encoder  = require("system.craft.encoder")
+local console  = require("system.utils.console")
+local api      = require("system.core.api")
 
 local M = {}
 
@@ -139,8 +139,10 @@ local function refreshItems()
       list[#list + 1] = { key = key, count = 0, craft = true }
     end
   end
-  table.sort(list, function(a, b)
+  for _, e in ipairs(list) do e.sortName = indexer.displayName(e.key):lower() end
+  table.sort(list, function(a, b) -- most first, equal counts A-Z by shown name
     if a.count ~= b.count then return a.count > b.count end
+    if a.sortName ~= b.sortName then return a.sortName < b.sortName end
     return a.key < b.key
   end)
   S.items = list
@@ -186,6 +188,9 @@ local function treeLines(plan)
     local mark = n.tool and "\15 " or ""
     local count = n.group and (#n.children .. " items")
       or (displayCount(n.key, done) .. "/" .. displayCount(n.key, n.need))
+    -- more is in storage, but queued/running orders hold it: "0/4 r3"
+    local held = (not n.group and not plan.job and done < n.need) and executor.reserved(n.key) or 0
+    if held > 0 then count = count .. " r" .. displayCount(n.key, held) end
     local w = g.treeW - 1 -- one free cell before the frame
     local room = math.max(2, w - #lead - #mark - #count - 1)
     local name = fit(n.label or indexer.displayName(n.key), room)
@@ -205,6 +210,7 @@ end
 local function drawTree()
   fill(g.treeX, g.treeY, g.treeX + g.treeW - 1, g.treeY + g.treeH - 1, C.bg)
   local plan = (S.job and S.job.plan) or S.plan
+  if plan then plan.job = S.job and S.job.plan == plan end
   if not plan then
     at(g.treeX, g.treeY, "No item selected", C.dim)
     return
@@ -412,12 +418,24 @@ local function drawList()
   end
 end
 
-local CLIP = "[Clip]"
+-- Mod buttons, right to left from the frame; S.buttonsAt = { { x1, x2, button } }.
+local function drawButtons()
+  S.buttonsAt = {}
+  local x = W - 1
+  for _, b in ipairs(api.buttons) do
+    x = x - #b.label
+    local on = b.active and b.active()
+    at(x, H, b.label, on and C.sel or C.text)
+    S.buttonsAt[#S.buttonsAt + 1] = { x, x + #b.label - 1, b }
+    x = x - 1
+  end
+  return W - 1 - x - 1 -- width taken
+end
 
 local function drawCounter()
   fill(g.listX, H, W - 1, H, C.bg)
   if S.panel then return end
-  at(W - 1 - #CLIP, H, CLIP, type(S.selected) == "table" and C.sel or C.text)
+  local taken = drawButtons()
   if not S.selected then return end
   local x = g.listX
   if S.job and S.job.status == "running" then
@@ -431,7 +449,7 @@ local function drawCounter()
   if S.plan and not ok then
     local hint = S.maxHint and (" max " .. S.maxHint) or " tap [N]=max"
     local hx = x + 15 + #shown
-    at(hx, H, fit(hint, math.max(0, W - 1 - #CLIP - hx)), C.dim)
+    at(hx, H, fit(hint, math.max(0, W - 2 - taken - hx)), C.dim)
   end
 end
 
@@ -471,6 +489,7 @@ end
 local function finishRecipe(draft)
   local function save(mainKey)
     for _, o in ipairs(draft.outputs) do o.main = (o.key == mainKey) or nil end
+    api.emit("recipe.encode", draft)
     local r = recipes.add(draft)
     message(("Saved: %s (%s)"):format(indexer.displayName(recipes.mainKey(r)), r.type), C.ok)
     refreshItems()
@@ -588,7 +607,7 @@ local function menuPick(o)
         list[#list + 1] = { label = ("%s (%d)"):format(name, #members), value = name }
       end
       table.sort(list, function(a, b) return a.label < b.label end)
-      if #list == 0 then message("No pools in data/config.lua", C.err); S.menu = nil return end
+      if #list == 0 then message("No pools in config.lua", C.err); S.menu = nil return end
       m.state, m.list, m.scroll = "id", list, 0
       return
     end
@@ -616,7 +635,9 @@ local function menuPick(o)
       if util.getMod(name) == o.value then
         local _, machine, id = util.parsePeripheralName(name)
         types[machine] = types[machine] or {}
-        table.insert(types[machine], { label = "[ID-" .. tostring(id or 0) .. "]", value = name, id = id or 0 })
+        local extra = api.filter("machine.label", "", name)
+        table.insert(types[machine], { label = "[ID-" .. tostring(id or 0) .. "]" .. (extra ~= "" and (" " .. extra) or ""),
+          value = name, id = id or 0 })
       end
     end
     local list = {}
@@ -698,7 +719,10 @@ end
 function M.touch(x, y)
   -- big ADD toggles the menu
   if inRect(x, y, 2, g.addY, 12, H) then
-    if S.menu then S.menu = nil else S.menu = { state = "type", scroll = 0 } end
+    if S.menu then S.menu = nil else
+      S.menu = { state = "type", scroll = 0 }
+      os.queueEvent("autocraft_rediscover") -- machines connected since the last look
+    end
     return
   end
   -- icons
@@ -723,16 +747,14 @@ function M.touch(x, y)
     if x <= g.treeX + 2 then S.treePage = S.treePage - 1 elseif x >= g.treeX + g.treeW - 3 then S.treePage = S.treePage + 1 end
     return
   end
-  -- clipboard: the whole list becomes the selection
-  if y == H and x >= W - 1 - #CLIP and x <= W - 2 and not S.panel then
-    if S.job and S.job.status == "running" then return end
-    local list, err = clipboard.read()
-    if not list then message("Clipboard: " .. tostring(err), C.err) return end
-    S.selected, S.amount, S.job, S.maxHint, S.treePage = list, 1, nil, nil, 0
-    replan()
-    local note = list.skipped > 0 and (", %d ticked skipped"):format(list.skipped) or ""
-    message(("%s: %d items%s"):format(list.title, #list.items, note), C.ok)
-    return
+  -- mod buttons on the bottom bar
+  if y == H and not S.panel then
+    for _, b in ipairs(S.buttonsAt or {}) do
+      if x >= b[1] and x <= b[2] then
+        if not (S.job and S.job.status == "running") then b[3].onTouch() end
+        return
+      end
+    end
   end
   -- counter: < << ][ >> > [N]
   if y == H and S.selected and x >= g.listX then
@@ -796,8 +818,15 @@ function M.init(cfg, multiblocks)
   if mon.setTextScale then mon.setTextScale(cfg.main_TextScale or 1) end
   mon.setCursorBlink(false)
   layout()
-  clipboard.init(cfg)
   refreshItems()
+  api.ui.message = function(text, color) message(text, color) end
+  api.ui.selected = function() return S.selected end
+  api.ui.select = function(target)
+    S.selected, S.job, S.maxHint, S.treePage = target, nil, nil, 0
+    S.amount = type(target) == "string" and indexer.isFluid(target) and 1000 or 1
+    replan()
+    os.queueEvent("jobs_changed")
+  end
 end
 
 -- for previews/tests: show a given state

@@ -6,10 +6,10 @@ tests/
 out.json
 __pycache__/
 # addon build output
-Mod/.gradle/
-Mod/**/build/
-Mod/**/.gradle/
-Mod/**/run/
+CC-Autocraft_Mod/.gradle/
+CC-Autocraft_Mod/**/build/
+CC-Autocraft_Mod/**/.gradle/
+CC-Autocraft_Mod/**/run/
 .idea/
 *.iml
 .vscode/

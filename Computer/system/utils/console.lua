@@ -5,9 +5,9 @@
 --   minecraft:iron_ingot > 8
 --   minecraft:stick > 1
 --
--- With debug = true in data/config.lua, blocks and lines also go to data/autocraft.log
+-- With debug_mode = true in config.lua, blocks and lines also go to data/autocraft.log
 -- (log.info: file only, not echoed), so the log alone shows what the terminal showed.
-local log = require("modules.log")
+local log = require("system.utils.log")
 
 local M = {}
 

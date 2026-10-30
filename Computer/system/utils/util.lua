@@ -101,18 +101,24 @@ function util.copy(t)
   return c
 end
 
--- Copies files from `from` (defaults/) into `to` (data/) that don't exist there yet. data/ is
--- never shipped: copying a new Computer/ onto the PC can't overwrite recipes or the config.
-function util.installDefaults(from, to)
-  if not fs.exists(to) then fs.makeDir(to) end
-  if not fs.exists(from) then return end
-  for _, f in ipairs(fs.list(from)) do
-    local dst = fs.combine(to, f)
-    if not fs.exists(dst) then fs.copy(fs.combine(from, f), dst) end
+-- First start (and the first start after an update from the old layout):
+--   system/default/config.lua -> config.lua (an old data/config.lua is moved there instead),
+--   system/default/multiblock.json -> data/multiblock.json, an empty mods/ folder.
+-- Existing files are never overwritten: the installer replaces system/, never these.
+function util.firstStart()
+  for _, dir in ipairs({ "data", "mods" }) do
+    if not fs.exists(dir) then fs.makeDir(dir) end
+  end
+  if not fs.exists("config.lua") then
+    if fs.exists("data/config.lua") then fs.move("data/config.lua", "config.lua")
+    elseif fs.exists("system/default/config.lua") then fs.copy("system/default/config.lua", "config.lua") end
+  end
+  if not fs.exists("data/multiblock.json") and fs.exists("system/default/multiblock.json") then
+    fs.copy("system/default/multiblock.json", "data/multiblock.json")
   end
 end
 
--- data/config.lua (a commented Lua table); data/config.json is still read if there's no .lua.
+-- config.lua (a commented Lua table); an old data/config.json is still read if there's none.
 local function readLuaConfig(path)
   if not fs.exists(path) then return nil end
   local fn, err = loadfile(path, "t", {})
@@ -129,16 +135,16 @@ local RENAMED = {
   debug_mode = { "debug", "dedug_mode" },
 }
 
--- data/config.lua; keys it lacks come from defaults/config.lua (new keys after an update),
+-- config.lua; keys it lacks come from system/default/config.lua (new keys after an update),
 -- then from `defaults`.
 function util.loadConfig(defaults)
-  local cfg = readLuaConfig("data/config.lua") or util.readJSON("data/config.json") or {}
+  local cfg = readLuaConfig("config.lua") or readLuaConfig("data/config.lua") or util.readJSON("data/config.json") or {}
   for new, olds in pairs(RENAMED) do
     for _, old in ipairs(olds) do
       if cfg[new] == nil and cfg[old] ~= nil then cfg[new] = cfg[old] end
     end
   end
-  local shipped = readLuaConfig("defaults/config.lua") or {}
+  local shipped = readLuaConfig("system/default/config.lua") or {}
   for _, layer in ipairs({ shipped, defaults or {} }) do
     for k, v in pairs(layer) do
       if cfg[k] == nil then cfg[k] = v end

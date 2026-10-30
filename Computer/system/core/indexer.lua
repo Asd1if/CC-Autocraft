@@ -9,8 +9,8 @@
 -- Two pools: the main storage (what the player sees and takes from) and the craft storage
 -- (cfg.craft_storage / craft_tanks, optional) where running orders keep their resources and
 -- intermediates. Counts cover both; the stock list shows the main storage only.
-local util = require("modules.util")
-local log  = require("modules.log")
+local util = require("system.utils.util")
+local log  = require("system.utils.log")
 
 local M = {
   storage = {}, tankNames = {},

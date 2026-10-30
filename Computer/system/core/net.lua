@@ -10,7 +10,7 @@
 --   * simple: net.request / net.receive directly (turtle worker);
 --   * service: net.on(type, handler) + run net.run() inside parallel / tasks.
 --     Handlers run inside the receive loop: keep them short and never call net.request from them.
-local log = require("modules.log")
+local log = require("system.utils.log")
 
 local net = { PROTOCOL = "aero", handlers = {}, running = false }
 

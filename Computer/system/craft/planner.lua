@@ -2,7 +2,8 @@
 --
 -- plan(target, qty, avail, recipes, points) -> {
 --   ok, root = node, steps = { step... } (children before parents), missing = { key = n } }
--- node = { key, need, stock, virtual, missing, craft = { recipe, runs, step } | nil, children }
+-- node = { key, need, stock, virtual, missing, craft = { recipe, runs, step } | nil, children,
+--   unpack = true (crafted by taking a block apart), mixed = true (children are parts) }
 -- step = { id, key, recipe, runs, deps = { step... } }
 -- target = an item key, or a list { title, items = { { key, count } } } (a clipboard): then the
 -- root is a group node (group = true, label = title) with one child per item x qty.
@@ -11,7 +12,12 @@
 -- then craft. The ordered item itself (each item of a list) is always crafted when it has a
 -- recipe: an order means "make this", storage stock of it is left alone. Fluids and items
 -- without a recipe are still taken from stock. Recipes are tried by priority; the first one that fully succeeds wins.
--- If none succeeds the highest-priority one is kept so the tree shows what's missing (red).
+-- If none succeeds alone, recipes are combined: each makes as much as storage allows, the next
+-- one the rest (5 ingots in stock, 1 iron block, raw iron for the rest). Such a node is `mixed`,
+-- its children are one part per recipe. Still short: the highest-priority recipe is kept so the
+-- tree shows what's missing (red).
+-- A recipe that takes a compacted block apart (iron block -> 9 ingots, the reverse of a recipe
+-- that packs them) marks its node `unpack`, the tree shows it.
 -- Cycles (ingot <-> block) are cut: an item can't be crafted from itself further down.
 -- Tools (recipe.tools = { { key, cost, maxDamage } }) aren't used up, they lose durability:
 -- each run costs `cost` points. points(key) lists the durability left in each tool in storage,
@@ -19,8 +25,12 @@
 -- tools to craft (maxDamage each). A tool with unknown durability is needed once per plan.
 local M = {}
 
+-- Expansions a plan may spend combining recipes (each try plans a subtree).
+M.MIX_BUDGET = 400
+
 function M.plan(target, qty, avail, recipes, points)
   local stock, virtual, steps, journal, spare = {}, {}, {}, {}, {}
+  local budget = M.MIX_BUDGET
 
   local function get(k)
     if stock[k] == nil then stock[k] = math.max(0, avail(k) or 0) end
@@ -57,7 +67,36 @@ function M.plan(target, qty, avail, recipes, points)
     for i = #journal, m + 1, -1 do journal[i](); journal[i] = nil end
   end
 
-  local need
+  local need, expand
+
+  local function isUnpack(r)
+    return recipes.isUnpack and recipes.isUnpack(r) or nil
+  end
+
+  -- q of k from several recipes, each as much as it can (halving the runs until a try plans
+  -- without missing items). Returns part nodes, or nil if together they still fall short.
+  local function mix(rs, k, q, path, depth)
+    local parts = {}
+    for _, r in ipairs(rs) do
+      local per = recipes.yield(r, k)
+      local runs = per > 0 and math.ceil(q / per) or 0
+      while q > 0 and runs >= 1 and budget > 0 do
+        local amount = math.min(q, runs * per)
+        local m = mark()
+        local craft, children, missing = expand(r, k, amount, path, depth)
+        if missing == 0 then
+          parts[#parts + 1] = { key = k, need = amount, stock = 0, virtual = 0, missing = 0,
+            craft = craft, children = children, deps = {}, unpack = isUnpack(r) }
+          q = q - amount
+          runs = math.min(runs, math.ceil(q / per))
+        else
+          rollback(m)
+          runs = math.floor(runs / 2)
+        end
+      end
+      if q == 0 then return parts end
+    end
+  end
 
   -- Tool node for `runs` crafts, or nil when tools this plan already holds have enough left.
   local function needTool(t, runs, path, depth)
@@ -91,7 +130,8 @@ function M.plan(target, qty, avail, recipes, points)
     return node
   end
 
-  local function expand(r, k, q, path, depth)
+  expand = function(r, k, q, path, depth)
+    budget = budget - 1
     local per = recipes.yield(r, k)
     local runs = math.ceil(q / per)
     local children, missing, deps = {}, 0, {}
@@ -159,10 +199,22 @@ function M.plan(target, qty, avail, recipes, points)
       rollback(m)
       craft = nil
     end
+    if not craft and #rs > 1 then
+      local m = mark()
+      local parts = mix(rs, k, q, path, depth)
+      if parts then
+        path[k] = nil
+        node.mixed, node.children = true, parts
+        for _, p in ipairs(parts) do node.deps[#node.deps + 1] = p.craft.step end
+        return node
+      end
+      rollback(m)
+    end
     if not craft then craft, children, missing = expand(rs[1], k, q, path, depth) end
     path[k] = nil
 
     node.craft, node.children, node.missing = craft, children, missing
+    node.unpack = isUnpack(craft.recipe)
     return node
   end
 

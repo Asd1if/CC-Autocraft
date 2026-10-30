@@ -45,6 +45,12 @@ return {
 
   -- ————————————————————————————————
 
+  -- Моды: system/mods/ (встроенные) и mods/ (свои). Выключить: mods_disabled = { "gtceu" }
+  mods_disabled = {},
+  gtceu_tier_up = true, -- рецепт с LV-машины может идти на MV, HV... того же типа и с той же платой
+
+  -- ————————————————————————————————
+
   substitutes = {
     planks = {
       "minecraft:oak_planks",

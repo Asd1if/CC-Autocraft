@@ -4,7 +4,7 @@
 --   tasks.spawn(net.run, "net")
 --   tasks.spawn(uiLoop, "ui")
 --   tasks.run()             -- never returns while tasks are alive
-local log = require("modules.log")
+local log = require("system.utils.log")
 
 local tasks = { list = {} }
 

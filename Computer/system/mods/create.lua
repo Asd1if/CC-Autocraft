@@ -1,4 +1,4 @@
--- Create clipboard as an order list, read with an Advanced Peripherals Block Reader facing a
+-- Mod: Create. Adds the [Clip] button to the main monitor: a Create clipboard as an order list, read with an Advanced Peripherals Block Reader facing a
 -- placed clipboard (Material Checklist from the schematicannon, or any clipboard whose lines
 -- have item icons).
 --
@@ -7,12 +7,25 @@
 -- Title: components["minecraft:custom_name"] (JSON text).
 --
 -- read() -> target = { title, items = { { key, count } }, skipped = n } for planner/executor.
-local M = {}
+-- config.lua: clipboard_reader (Block Reader name, nil = find), clipboard_skip_checked.
+local M = { name = "create", description = "Create clipboard as an order list" }
 
 local TITLES = { ["create.materialChecklist"] = "Material Checklist" }
 
-function M.init(cfg)
-  M.cfg = cfg
+-- [Clip] reads the clipboard: the whole list becomes the selection (the counter multiplies it).
+function M.init(api)
+  M.cfg = api.cfg
+  api.button({
+    label = "[Clip]",
+    active = function() return type(api.ui.selected()) == "table" end,
+    onTouch = function()
+      local list, err = M.read()
+      if not list then api.ui.message("Clipboard: " .. tostring(err), colors.red) return end
+      api.ui.select(list)
+      local note = list.skipped > 0 and (", %d ticked skipped"):format(list.skipped) or ""
+      api.ui.message(("%s: %d items%s"):format(list.title, #list.items, note), colors.lime)
+    end,
+  })
 end
 
 function M.find()
