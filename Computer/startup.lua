@@ -42,6 +42,7 @@ local function readMultiblocks()
       "item_input", "item_output", "fluid_input", "fluid_output" }) do
       if mb[field] then mbParts[mb[field]] = true end
     end
+    for _, name in ipairs(type(mb.inputs) == "table" and mb.inputs or {}) do mbParts[name] = true end
   end
 end
 readMultiblocks()

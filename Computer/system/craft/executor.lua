@@ -135,6 +135,21 @@ function M.memberIO(name)
 end
 
 -- Inventory/tank names a recipe works with (a pool: its first member, used for the test).
+--   inItem/outItem/inFluid/outFluid as before; inputs = item inventories inputs go into (a
+--   multiblock with "inputs": a depot and a deployer: input.into picks one, 1 by default);
+--   items = every item inventory of the machine (results are collected from all of them);
+--   batch = runs fed ahead (multiblock "batch", else cfg.batch).
+local function withLists(io, inputs, batch)
+  io.inputs = inputs or { io.inItem }
+  io.items, io.isInput = {}, {}
+  for _, n in ipairs(io.inputs) do
+    if not io.isInput[n] then io.isInput[n] = true; io.items[#io.items + 1] = n end
+  end
+  if not io.isInput[io.outItem] then io.items[#io.items + 1] = io.outItem end
+  io.batch = batch
+  return io
+end
+
 function M.machineIO(r)
   if r.type == "pool" then
     local members = M.pools[r.machine] or error("unknown pool " .. tostring(r.machine))
@@ -142,13 +157,24 @@ function M.machineIO(r)
   end
   if r.type == "multiblock" then
     local mb = M.mb[r.machine] or error("unknown multiblock " .. tostring(r.machine))
-    local inItem  = mb.input_item or mb.item_input
+    local inputs = type(mb.inputs) == "table" and #mb.inputs > 0 and mb.inputs or nil
+    local inItem  = mb.input_item or mb.item_input or (inputs and inputs[1])
     local outItem = mb.output_item or mb.item_output or inItem
     local inFluid = mb.input_fluid or mb.fluid_input or inItem
     local outFluid = mb.output_fluid or mb.fluid_output or outItem
-    return { inItem = inItem, outItem = outItem, inFluid = inFluid, outFluid = outFluid }
+    return withLists({ inItem = inItem, outItem = outItem, inFluid = inFluid, outFluid = outFluid },
+      inputs, tonumber(mb.batch))
   end
-  return { inItem = r.machine, outItem = r.machine, inFluid = r.machine, outFluid = r.machine }
+  return withLists({ inItem = r.machine, outItem = r.machine, inFluid = r.machine, outFluid = r.machine })
+end
+
+-- Item counts over every inventory of a machine plus its output tank (tests, collecting).
+function M.snapshotIO(io)
+  local c = M.snapshot(nil, io.outFluid)
+  for _, inv in ipairs(io.items or { io.outItem }) do
+    for k, n in pairs(M.snapshot(inv, nil)) do c[k] = (c[k] or 0) + n end
+  end
+  return c
 end
 
 -- Counts by key in an inventory and a fluid container (either may be nil / not support it).
@@ -181,21 +207,26 @@ local function isInput(inKeys, k)
   return false
 end
 
+-- Inputs stay where they were put (depot, basin, deployer hand); a separate output block
+-- gives everything back, inputs too.
 local function collect(io, inKeys, pool)
   local got = {}
-  local ok, list = pcall(peripheral.call, io.outItem, "list")
-  if ok and list then
-    for slot, it in pairs(list) do
-      local k = itemKey(it)
-      if not isInput(inKeys, k) and not api.any("machine.keep", io.outItem, it) then
-        local n = indexer.insert(io.outItem, slot, it.count, it.name, pool)
-        if n > 0 then got[k] = (got[k] or 0) + n end
+  for _, inv in ipairs(io.items or { io.outItem }) do
+    local ok, list = pcall(peripheral.call, inv, "list")
+    if ok and list then
+      for slot, it in pairs(list) do
+        local k = itemKey(it)
+        local stays = io.isInput and io.isInput[inv] and isInput(inKeys, k)
+        if not stays and not api.any("machine.keep", inv, it) then
+          local n = indexer.insert(inv, slot, it.count, it.name, pool)
+          if n > 0 then got[k] = (got[k] or 0) + n end
+        end
       end
     end
   end
   local fcur = M.snapshot(nil, io.outFluid)
   for k, amount in pairs(fcur) do
-    if indexer.isFluid(k) and not inKeys[k] and amount > 0 then
+    if indexer.isFluid(k) and not (io.inFluid == io.outFluid and inKeys[k]) and amount > 0 then
       local n = indexer.insertFluid(io.outFluid, k, amount, pool)
       if n > 0 then got[k] = (got[k] or 0) + n end
     end
@@ -552,19 +583,22 @@ end
 local function runMachine(job, s)
   local r = s.recipe
   local io = s.io or M.machineIO(r)
-  -- inputs are fed at most cfg.batch runs ahead of what came out
-  local perRun, fed = {}, {}
+  -- inputs are fed at most `batch` runs ahead of what came out; feeds = one per key and
+  -- inventory (input.into: which of the machine's inputs, the deployer's hand for example)
+  local feeds, byId = {}, {}
   for _, inp in ipairs(r.inputs) do
     local key = recipes.inputKey(r, inp.key)
-    perRun[key] = (perRun[key] or 0) + inp.count; fed[key] = 0
+    local to = io.inputs and io.inputs[inp.into or 1] or io.inItem
+    local id = key .. ">" .. to
+    if not byId[id] then
+      byId[id] = { key = key, to = to, count = 0, fed = 0 }
+      feeds[#feeds + 1] = byId[id]
+    end
+    byId[id].count = byId[id].count + inp.count
   end
-  local batch = math.max(1, M.cfg.batch or 16)
-  -- inputs stay in the machine when it is also the output (depot, basin); separate output
-  -- blocks (multiblocks) give everything back
+  local batch = math.max(1, io.batch or M.cfg.batch or 16)
   local inKeys = {}
-  if io.inItem == io.outItem or io.inFluid == io.outFluid then
-    for key in pairs(perRun) do inKeys[key] = true end
-  end
+  for _, f in ipairs(feeds) do inKeys[f.key] = true end
   local mainKey = recipes.mainKey(r)
   local per = recipes.yield(r, mainKey)
   local expect = per * s.runs
@@ -575,13 +609,13 @@ local function runMachine(job, s)
   while produced < expect do
     if job.error then error("stopped: " .. job.error, 0) end
     local runs = math.min(s.runs, math.floor(produced / per) + batch)
-    for key, c in pairs(perRun) do
-      local n = c * runs - fed[key]
+    for _, f in ipairs(feeds) do
+      local n = f.count * runs - f.fed
       if n > 0 then
         local moved
-        if indexer.isFluid(key) then moved = indexer.extractFluid(key, n, io.inFluid)
-        else moved = indexer.extract(key, n, io.inItem) end
-        if moved > 0 then fed[key] = fed[key] + moved; unreserve(job, key, moved); last = os.clock() end
+        if indexer.isFluid(f.key) then moved = indexer.extractFluid(f.key, n, io.inFluid)
+        else moved = indexer.extract(f.key, n, f.to) end
+        if moved > 0 then f.fed = f.fed + moved; unreserve(job, f.key, moved); last = os.clock() end
       end
     end
     sleep(0.5)
@@ -594,7 +628,7 @@ local function runMachine(job, s)
     s.doneRuns = math.min(s.runs, math.floor(produced / per))
     -- between outputs the bar moves by the time one run took in the test
     local inside = math.huge
-    for key, c in pairs(perRun) do inside = math.min(inside, math.floor(fed[key] / c)) end
+    for _, f in ipairs(feeds) do inside = math.min(inside, math.floor(f.fed / f.count)) end
     if inside == math.huge then inside = s.runs end
     local inFlight = math.min(s.runs, inside) - s.doneRuns
     local partial = 0
@@ -661,7 +695,7 @@ end
 
 -- Everything in a machine (inputs too) back to storage: after a failed or cancelled step.
 local function drain(io)
-  for _, inv in ipairs({ io.inItem, io.outItem }) do
+  for _, inv in ipairs(io.items or { io.inItem, io.outItem }) do
     local ok, list = pcall(peripheral.call, inv, "list")
     if ok and list then
       for slot, it in pairs(list) do

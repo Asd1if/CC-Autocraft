@@ -6,6 +6,9 @@
 -- to the barrel: results go to slot 14 first (the grid is empty by then), fluids to the tanks.
 -- Turtle tests also record the results' stack size (unstackable ones are crafted one by one)
 -- and tools: grid items that stay after the craft, maybe with less durability.
+-- A multiblock with several inputs (multiblock.json "inputs": depot, deployer...) takes each
+-- row of the barrel grid into one of them: row 1 -> inputs[1], row 2 -> inputs[2], row 3 ->
+-- inputs[3]. The recipe remembers it (input.into).
 local net      = require("system.core.net")
 local indexer  = require("system.core.indexer")
 local executor = require("system.craft.executor")
@@ -122,6 +125,24 @@ local function sorted(map)
   return list
 end
 
+-- Recipe inputs from per-inventory counts: { [index] = { key = n } } -> { { key, count, into } }.
+-- into is left out for the first (only) input, like recipes saved before it existed.
+local function routed(byInput, fluids)
+  local list = {}
+  for into, map in pairs(byInput) do
+    for _, e in ipairs(sorted(map)) do
+      if into > 1 then e.into = into end
+      list[#list + 1] = e
+    end
+  end
+  for _, e in ipairs(sorted(fluids)) do list[#list + 1] = e end
+  table.sort(list, function(a, b)
+    if (a.into or 1) ~= (b.into or 1) then return (a.into or 1) < (b.into or 1) end
+    return a.count > b.count
+  end)
+  return list
+end
+
 -- ---------------------------------------------------------------- turtle
 
 -- Turtle slots as console rows: "slot 1 > minecraft:oak_planks x1".
@@ -195,14 +216,24 @@ function M.testMachine(r, fluidAmounts, onProgress)
   local e = enc()
   local io = executor.machineIO(r)
   local grid = M.readGrid()
-  local base = executor.snapshot(io.outItem, io.outFluid)
-  local inputs = {}
+  local base = executor.snapshotIO(io)
+  local inputs, byInput = {}, {}
+  local several = #io.inputs > 1
 
   for i, g in ipairs(grid) do
     if g.key then
-      local ok, moved = pcall(peripheral.call, e, "pushItems", io.inItem, M.GRID[i], g.count)
+      local into = several and math.ceil(i / 3) or 1
+      local to = io.inputs[into]
+      if not to then
+        error(("grid row %d has no input in %s (it has %d)"):format(into, tostring(r.machine), #io.inputs), 0)
+      end
+      local ok, moved = pcall(peripheral.call, e, "pushItems", to, M.GRID[i], g.count)
       moved = ok and moved or 0
-      if moved > 0 then inputs[g.key] = (inputs[g.key] or 0) + moved end
+      if moved > 0 then
+        inputs[g.key] = (inputs[g.key] or 0) + moved
+        byInput[into] = byInput[into] or {}
+        byInput[into][g.key] = (byInput[into][g.key] or 0) + moved
+      end
     end
   end
   for _, f in ipairs(M.readTanks()) do
@@ -215,13 +246,11 @@ function M.testMachine(r, fluidAmounts, onProgress)
   end
   if next(inputs) == nil then error("nothing was accepted by " .. io.inItem, 0) end
 
-  -- inputs pushed into the output inventory itself (depot, basin) are not results
+  -- inputs lie in the machine's inventories (the snapshot covers them all): not results
   local expectBase = {}
   for k, v in pairs(base) do expectBase[k] = v end
-  if io.inItem == io.outItem then
-    for k, v in pairs(inputs) do
-      if not indexer.isFluid(k) then expectBase[k] = (expectBase[k] or 0) + v end
-    end
+  for k, v in pairs(inputs) do
+    if not indexer.isFluid(k) then expectBase[k] = (expectBase[k] or 0) + v end
   end
   if io.inFluid == io.outFluid then
     for k, v in pairs(inputs) do
@@ -234,7 +263,7 @@ function M.testMachine(r, fluidAmounts, onProgress)
   local gains, stable, prevSig = {}, 0, ""
   while true do
     sleep(0.5)
-    local cur = executor.snapshot(io.outItem, io.outFluid)
+    local cur = executor.snapshotIO(io)
     gains = {}
     for k, v in pairs(cur) do
       local d = v - (expectBase[k] or 0)
@@ -258,14 +287,16 @@ function M.testMachine(r, fluidAmounts, onProgress)
   -- results back to the barrel (slot 14 first) and the recipe tanks
   local left = {}
   for k, v in pairs(gains) do left[k] = v end
-  local ok, list = pcall(peripheral.call, io.outItem, "list")
   local first = true
-  if ok and list then
-    for slot, it in pairs(list) do
-      local k = itemKey(it)
-      if (left[k] or 0) > 0 then
-        left[k] = left[k] - toBarrel(io.outItem, slot, math.min(it.count, left[k]), first)
-        first = false
+  for _, inv in ipairs(io.items) do
+    local ok, list = pcall(peripheral.call, inv, "list")
+    if ok and list then
+      for slot, it in pairs(list) do
+        local k = itemKey(it)
+        if (left[k] or 0) > 0 then
+          left[k] = left[k] - toBarrel(inv, slot, math.min(it.count, left[k]), first)
+          first = false
+        end
       end
     end
   end
@@ -279,8 +310,10 @@ function M.testMachine(r, fluidAmounts, onProgress)
     end
   end
 
+  local fluids = {}
+  for k, v in pairs(inputs) do if indexer.isFluid(k) then fluids[k] = v end end
   return {
-    type = r.type, machine = r.machine, inputs = sorted(inputs), outputs = outputs, time = elapsed,
+    type = r.type, machine = r.machine, inputs = routed(byInput, fluids), outputs = outputs, time = elapsed,
   }
 end
 

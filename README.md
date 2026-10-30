@@ -14,7 +14,7 @@ Storage and autocrafting for CC: Tweaked (Minecraft 1.21.1, NeoForge), built for
 - auto-restock, a small tank monitor for the encoder;
 - **mods**: Create clipboard orders, GregTech circuits and tiers, and your own (see [MODS.md](MODS.md)).
 
-Most machines of other mods work too: anything with one inventory the computer can reach. Create is fully covered except recipes that need items in two places at once (deployer hand + depot).
+Most machines of other mods work too: anything with an inventory the computer can reach. Machines that need items in several places at once (a Create deployer's hand + the depot under it) are multiblocks with several `inputs`, see below.
 
 The [CC-Autocraft_Mod](CC-Autocraft_Mod) folder holds an EMI/JEI addon that lays a recipe from the recipe viewer into the encoder barrel (Fabric 1.20.1 / 1.21.1, Forge 1.20.1, NeoForge 1.21.1).
 
@@ -103,6 +103,27 @@ Old key names (`monitor`, `encoder_monitor`, `text_scale`, `modem`, `debug`) are
 - **Circuits**: put the programmed circuit into the machine's input bus/inventory. A recipe remembers the circuit of the machine it was tested on, and every machine of the same kind with the same circuit runs it too: they share the work like a pool, no config needed. The circuit always stays in the machine.
 - **Tiers**: a recipe tested on an LV machine also runs on MV, HV... machines of the same kind and circuit (`gtceu_tier_up = false` turns it off). The tested machine goes first, then the lowest tiers.
 - The ADD menu shows tier and circuit next to each machine: `[ID-3] LV c5`.
+
+## Multiblocks and multi-input machines (`data/multiblock.json`)
+```json
+{
+  "mixer_line": {
+    "input_item": "create:depot_1",
+    "output_item": "create:depot_2",
+    "input_fluid": "create:fluid_tank_4",
+    "output_fluid": "create:fluid_tank_5"
+  },
+  "casing": {
+    "inputs": ["create:depot_0", "create:deployer_0"],
+    "batch": 1
+  }
+}
+```
+- Only `input_item` (or `inputs`) is required. Without an output the result is looked for in the input block.
+- `inputs`: several inventories that get different items, e.g. a depot and the deployer above it. When you encode, **each row of the barrel grid goes into one input**: row 1 (slots 4-6) -> `inputs[1]`, row 2 (13-15) -> `inputs[2]`, row 3 (22-24) -> `inputs[3]`. For a casing: log in row 1, andesite alloy in row 2. The recipe remembers where each item goes.
+- Results are collected from every inventory of the machine (the depot here); inputs stay where they were put. The output defaults to `inputs[1]`.
+- `batch`: how many runs are fed ahead (default `batch` from config.lua). Use 1 for deployers, so the hand holds one item at a time.
+- Blocks listed here are machines, never storage. The ADD menu lists them under Multiblock; they work in `pools` too.
 
 ## Substitute groups
 ```lua
