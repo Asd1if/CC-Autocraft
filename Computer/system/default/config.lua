@@ -17,6 +17,7 @@ return {
   debug_mode = false,
 
   craft_timeout = 60,
+  stall_timeout = nil, -- заказ, в котором ничего не движется столько секунд, падает (nil = 3 x craft_timeout)
   batch = 16,
   restock_interval = 30,
   rescan = 10,

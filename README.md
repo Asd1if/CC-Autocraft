@@ -69,6 +69,7 @@ Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item
 - **S** on the computer's keyboard searches; **Q** cancels the running order.
 - `[Clip]` (create mod) reads a Create clipboard (Material Checklist) through an Advanced Peripherals Block Reader and orders the whole list.
 - Messages (order placed, done, missing items, failures) are printed in the computer's terminal.
+- While an order waits, the top line says why: `Wait: Iron ingot: no free turtle`, `... create:press_0 busy`, `... not on the network`, `... moving items to the craft storage`. An order that stands still for `stall_timeout` fails with that reason, so the queue and restock go on.
 
 ## Config (`config.lua`)
 | Key | What |
@@ -81,6 +82,7 @@ Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item
 | `rednet_modem` | modem for turtle commands; `nil` = every modem (the wired one is enough) |
 | `debug_mode` | full log in `data/autocraft.log`; otherwise warnings and errors only |
 | `craft_timeout` | seconds a machine may sit idle before the order fails |
+| `stall_timeout` | seconds an order may stand still (nothing running, no progress) before it fails; `nil` = 3 x `craft_timeout` |
 | `batch` | crafts per turtle call / machine load-ahead |
 | `restock_interval` | seconds between auto-restock checks |
 | `rescan` | seconds between full storage rescans |

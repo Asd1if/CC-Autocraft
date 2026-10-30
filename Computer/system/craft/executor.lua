@@ -13,7 +13,10 @@
 -- intermediates are put there, so the player can't take them by hand. Final results go to the
 -- main storage; once no job is running the craft storage is emptied back.
 -- A fluid ordered with opts.deliver is poured into the encoder's recipe tanks when done
--- (M.deliverFluid, set by main.lua to encoder.deliverFluid).
+-- (M.deliverFluid, set by startup.lua to encoder.deliverFluid).
+-- Every step says why it waits (s.why: "no free turtle", "create:press_0 busy"...), the monitor
+-- shows it. A running order where nothing runs and nothing moves for cfg.stall_timeout seconds
+-- (default 3 x craft_timeout) fails with those reasons, so the queue and restock go on.
 local log     = require("system.utils.log")
 local console = require("system.utils.console")
 local net     = require("system.core.net")
@@ -242,8 +245,9 @@ local function depsRunning(s)
 end
 
 -- Waits while producers are still running; fails the step if the job already failed.
-local function waitForDeps(job)
+local function waitForDeps(job, s)
   if job.error then error("stopped: " .. job.error, 0) end
+  if s then (s.parent or s).why = "waits for ingredients" end
   os.queueEvent("jobs_changed")
   sleep(1)
 end
@@ -323,12 +327,16 @@ end
 -- queued -> running. Steps wait until the reserve sits in the craft storage: moving it while a
 -- step extracts from the same slots made the step find nothing.
 local function start(job)
-  job.status, job.started = "running", os.clock()
+  job.status, job.started, job.movedAt = "running", os.clock(), os.clock()
   job.staged = #indexer.craft == 0 and #indexer.craftTanks == 0
   if not job.staged then
     tasks.spawn(function()
-      for key, n in pairs(job.reserve) do indexer.stage(key, n) end
-      indexer.scan()
+      -- a failed move only means the steps take from the main storage: never block the order
+      for key, n in pairs(job.reserve) do
+        local ok, err = pcall(indexer.stage, key, n)
+        if not ok then log.warn("job #%d: moving %s to the craft storage failed: %s", job.id, key, tostring(err)) end
+      end
+      pcall(indexer.scan)
       job.staged = true
       os.queueEvent("jobs_changed")
     end, "stage")
@@ -361,15 +369,19 @@ local function finish(job, status)
     log.info("job %s cancelled", label)
     console.block(label .. ": cancelled", colors.orange, { { "items are going back to storage" } })
   else
-    log.info("job %s failed: %s", label, tostring(job.error))
+    log.warn("job %s failed: %s", label, tostring(job.error))
     console.block(label .. ": failed", colors.red, { { job.error or "?" } })
   end
   M.save()
   api.emit("order." .. status, job)
   M.cleaning = true
   tasks.spawn(function()
-    if status == "done" and job.deliver then deliver(job, label) end
-    indexer.sweep()
+    -- M.cleaning must drop whatever happens here, or no order would ever start again
+    local ok, err = pcall(function()
+      if status == "done" and job.deliver then deliver(job, label) end
+      indexer.sweep()
+    end)
+    if not ok then log.warn("emptying the craft storage failed: %s", tostring(err)) end
     M.cleaning = false
     os.queueEvent("jobs_changed")
   end, "sweep")
@@ -490,14 +502,15 @@ local function runTurtle(job, s, t)
         end
       end
       if can >= 1 then n = can break end
-      waitForDeps(job)
+      waitForDeps(job, s)
     end
+    (s.parent or s).why = nil
     local feeding = depsRunning(s)
     local filled, short = fill(job, r, t, n)
     if not filled then
       -- producers were running: another turtle took what was there, wait for more
       if not (feeding or depsRunning(s)) then error(short, 0) end
-      waitForDeps(job)
+      waitForDeps(job, s)
     else
       local reply, err = M.ask(t, "craft", { count = n, detail = learn }, 15)
       if not reply then M.clearTurtle(t, nil, "craft"); error("turtle: " .. tostring(err), 0) end
@@ -678,11 +691,12 @@ function M.workers(r)
   return { r.machine }
 end
 
+-- Returns a claim, or nil + why the step can't start now.
 local function claimFor(s)
   local r = s.recipe
   if r.type == "turtle" then
     local t = M.freeTurtle()
-    if not t then return nil end
+    if not t then return nil, M.anyTurtle() and "all turtles busy" or "no turtle online" end
     t.busy = true
     return { turtle = t }
   end
@@ -693,13 +707,20 @@ local function claimFor(s)
       if #got >= s.runs then break end
       if not M.busy[busyKey(name)] then got[#got + 1] = name end
     end
-    if #got == 0 then return nil end
+    if #got == 0 then
+      return nil, #workers == 0 and ("pool " .. tostring(r.machine) .. " is empty") or "all machines busy"
+    end
     local keys = {}
     for _, name in ipairs(got) do keys[#keys + 1] = busyKey(name); M.busy[busyKey(name)] = true end
     return { members = got, keys = keys }
   else
     local key = (r.type == "multiblock" and "mb:" or "") .. r.machine
-    if not M.busy[key] then M.busy[key] = true; return { machine = key, io = M.machineIO(r) } end
+    if M.busy[key] then return nil, r.machine .. " busy" end
+    local ok, io = pcall(M.machineIO, r)
+    if not ok then return nil, tostring(io) end
+    if not peripheral.isPresent(io.inItem) then return nil, io.inItem .. " not on the network" end
+    M.busy[key] = true
+    return { machine = key, io = io }
   end
 end
 
@@ -720,7 +741,8 @@ local function runStep(job, s, claim)
     if claim.io then pcall(drain, claim.io) end
     for _, name in ipairs(claim.members or {}) do pcall(drain, M.memberIO(name)) end
   end
-  release(claim)
+  pcall(release, claim)
+  s.why = nil
   if ok then
     s.status, s.doneRuns, s.progress = "done", s.runs, nil
   elseif job.error then
@@ -729,7 +751,7 @@ local function runStep(job, s, claim)
   else
     s.status, s.error = "fail", tostring(err)
     job.error = indexer.displayName(s.key) .. ": " .. tostring(err)
-    log.info("job #%d step %s failed: %s", job.id, indexer.displayName(s.key), tostring(err))
+    log.warn("job #%d step %s failed: %s", job.id, indexer.displayName(s.key), tostring(err))
   end
   os.queueEvent("jobs_changed")
 end
@@ -746,20 +768,44 @@ function M.schedule()
   if cur then
     local allDone, anyRunning, anyFailed = true, false, false
     for _, s in ipairs(cur.steps) do
+      if s.status == "run" and s.task and coroutine.status(s.task) == "dead" then
+        -- its task ended without saying how (crashed outside runStep's pcall)
+        s.status, s.error = "fail", "step stopped unexpectedly"
+        cur.error = cur.error or (indexer.displayName(s.key) .. ": step stopped unexpectedly")
+        if s.claim then pcall(release, s.claim) end
+      end
       if s.status == "fail" then anyFailed = true end
-      if s.status == "wait" and cur.staged and not cur.error and depsReady(s) then
-        local claim = claimFor(s)
-        if claim then
-          s.status = "run"
-          tasks.spawn(runStep, "step", cur, s, claim)
+      if s.status == "wait" then
+        if not cur.staged then
+          s.why = "moving items to the craft storage"
+        elseif cur.error then
+          s.why = nil
+        elseif not depsReady(s) then
+          for _, d in ipairs(s.deps) do
+            if d.status ~= "done" and d.status ~= "run" then s.why = "waits for " .. indexer.displayName(d.key) break end
+          end
+        else
+          local claim, why = claimFor(s)
+          s.why = why
+          if claim then
+            s.status, s.claim = "run", claim
+            s.task = tasks.spawn(runStep, "step", cur, s, claim)
+          end
         end
       end
       if s.status ~= "done" then allDone = false end
       if s.status == "run" then anyRunning = true end
     end
+    -- stall watchdog: progress, a running step or staging resets the clock
+    local p = M.progress(cur)
+    if p ~= cur.lastProgress or anyRunning or not cur.staged then cur.lastProgress, cur.movedAt = p, os.clock() end
+    local limit = M.cfg.stall_timeout or 3 * (M.cfg.craft_timeout or 60)
     if allDone then finish(cur, "done")
     elseif (anyFailed or cur.cancelled) and not anyRunning then
       finish(cur, cur.cancelled and "cancelled" or "failed")
+    elseif not anyRunning and os.clock() - (cur.movedAt or os.clock()) > limit then
+      cur.error = ("stalled %ds: %s"):format(math.floor(limit), M.why(cur) or "nothing can start")
+      finish(cur, "failed")
     end
   elseif not M.cleaning then
     local nxt
@@ -793,6 +839,13 @@ function M.queueRows(limit)
   for _, j in ipairs(M.jobs) do if j.status == "queued" then rows[#rows + 1] = j end end
   while #rows > limit do table.remove(rows, 1) end
   return rows
+end
+
+-- Why the order isn't moving: the first waiting step's reason ("Iron ingot: no free turtle").
+function M.why(job)
+  for _, s in ipairs(job and job.steps or {}) do
+    if s.why and s.status ~= "done" then return indexer.displayName(s.key) .. ": " .. s.why end
+  end
 end
 
 function M.activeJob()

@@ -467,7 +467,10 @@ end
 
 local function drawStatus()
   fill(1, 1, g.fx - 1, 1, C.bg)
-  if S.msg and os.clock() < S.msgUntil then at(2, 1, fit(S.msg, g.fx - 2), S.msgColor) end
+  if S.msg and os.clock() < S.msgUntil then at(2, 1, fit(S.msg, g.fx - 2), S.msgColor) return end
+  -- otherwise why the running order waits: "Wait: Iron ingot: no free turtle"
+  local why = executor.why(executor.activeJob())
+  if why then at(2, 1, fit("Wait: " .. why, g.fx - 2), C.warn) end
 end
 
 function M.draw()
