@@ -12,7 +12,7 @@ Storage and autocrafting for CC: Tweaked (Minecraft 1.21.1, NeoForge), built for
 - tools that wear out (hammers, wrenches) are planned by durability;
 - **substitute groups**: a recipe encoded with oak planks takes any planks;
 - auto-restock, a small tank monitor for the encoder;
-- **mods**: Create clipboard orders, GregTech circuits and tiers, and your own (see [MODS.md](MODS.md)).
+- **mods**: Create clipboard orders, GregTech circuits and tiers, AE2 / Refined Storage as storage, and your own (see [MODS.md](MODS.md)).
 
 Most machines of other mods work too: anything with an inventory the computer can reach. Machines that need items in several places at once (a Create deployer's hand + the depot under it) are multiblocks with several `inputs`, see below.
 
@@ -35,7 +35,7 @@ system/
   default/       config and multiblock.json templates
   core/          storage index, monitor, network, task scheduler, mod API and loader
   craft/         recipes, planner, order queue, recipe encoder
-  mods/          shipped mods: create.lua, gtceu.lua
+  mods/          shipped mods: create.lua, gtceu.lua, bridge.lua
   utils/         formatting, log, terminal messages
 ```
 Edit `config.lua`: a Lua table where every key is commented (in Russian). An install from before this layout is moved over on the first start (`data/config.lua` becomes `config.lua`).
@@ -98,6 +98,16 @@ Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item
 | `gtceu_chips` | extra circuit NBT hashes: `["<hash>"] = number` |
 
 Old key names (`monitor`, `encoder_monitor`, `text_scale`, `modem`, `debug`) are still read. Keys missing from `config.lua` come from `system/default/config.lua`.
+
+## AE2 / Refined Storage (bridge mod)
+Put an Advanced Peripherals **ME Bridge** or **RS Bridge** on the wired network: it becomes part of the main storage by itself, nothing to configure.
+- Its items and fluids show in the stock list and count for crafting; orders take from it (straight into turtle slots and machines) and put results into it.
+- New items go into the network; an item that already lies in a vault joins its pile there. The vaults can stay as a buffer or go.
+- The bridge moves items to any peripheral on the cable, so it can stand anywhere on the network.
+- `exclude = { "me_bridge_0" }` leaves one bridge out, `mods_disabled = { "bridge" }` all of them.
+- Don't also list a vault that the network reads through a storage bus: it would be counted twice.
+- Items with data (damaged tools, filled containers) are told apart by the bridge's fingerprint and don't merge with the same item in a vault.
+- Written for the AP 0.8 / 1.21.1 API (`getItems`, `exportItem(filter, target)`, `importItem`); the older names are tried too.
 
 ## GregTech (gtceu mod)
 - **Circuits**: put the programmed circuit into the machine's input bus/inventory. A recipe remembers the circuit of the machine it was tested on, and every machine of the same kind with the same circuit runs it too: they share the work like a pool, no config needed. The circuit always stays in the machine.

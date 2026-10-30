@@ -1,6 +1,6 @@
 # Mods / Моды
 
-A mod is one Lua file. Shipped mods live in `system/mods/` on the computer (`create.lua`, `gtceu.lua`), your own go into `mods/`: the installer never touches that folder. A file in `mods/` with the same name as a shipped one replaces it. Turn a mod off in `config.lua`: `mods_disabled = { "gtceu" }`.
+A mod is one Lua file. Shipped mods live in `system/mods/` on the computer (`create.lua`, `gtceu.lua`, `bridge.lua`), your own go into `mods/`: the installer never touches that folder. A file in `mods/` with the same name as a shipped one replaces it. Turn a mod off in `config.lua`: `mods_disabled = { "gtceu" }`.
 
 Мод — один Lua-файл. Встроенные лежат в `system/mods/`, свои кладите в `mods/` — установщик эту папку не трогает. Файл в `mods/` с тем же именем заменяет встроенный. Выключить мод: `mods_disabled = { "gtceu" }` в `config.lua`.
 
@@ -50,6 +50,7 @@ Item keys: `"minecraft:oak_planks"`, `"name#nbt"` for NBT variants, `"name#*"` a
 | `machine.workers` | `list, recipe` | filter: return the peripheral names that may run a machine recipe (several = shared like a pool) |
 | `machine.keep` | `inventory, item` | return `true` to leave an item inside a machine (a GregTech circuit) |
 | `machine.label` | `text, name` | filter: text shown after `[ID-n]` in the ADD menu |
+| `storage.backends` | `list, cfg, exclude` | filter: add storage that isn't an inventory: `{ name, scan, extract, insert, extractFluid, insertFluid }` (see `system/core/indexer.lua`, `system/mods/bridge.lua`) |
 | `order.done`, `order.failed`, `order.cancelled` | `job` | `job.key`, `job.qty`, `job.error` |
 
 `filter` hooks return a new value or `nil` to keep the current one; `any` hooks return `true` to say yes.

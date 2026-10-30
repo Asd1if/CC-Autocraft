@@ -9,8 +9,18 @@
 -- Two pools: the main storage (what the player sees and takes from) and the craft storage
 -- (cfg.craft_storage / craft_tanks, optional) where running orders keep their resources and
 -- intermediates. Counts cover both; the stock list shows the main storage only.
+--
+-- Backends: storage that isn't a plain inventory (an AE2 / Refined Storage network through an
+-- Advanced Peripherals bridge). Mods return them from the "storage.backends" filter; they belong
+-- to the main storage. A backend is
+--   { name, scan() -> items { { name, nbt, count, displayName } }, fluids { { name, amount } },
+--     extract(name, nbt, n, to, toSlot) -> moved, insert(from, slot, n, itemName) -> moved,
+--     extractFluid(name, n, to) -> moved, insertFluid(from, name, n) -> moved }
+-- Taking: craft storage, inventories, then backends. Putting: craft storage (for orders),
+-- inventories that already hold the item, then backends, then the other inventories.
 local util = require("system.utils.util")
 local log  = require("system.utils.log")
+local api  = require("system.core.api")
 
 local M = {
   storage = {}, tankNames = {},
@@ -20,6 +30,7 @@ local M = {
   agg = nil,    -- cached aggregate, rebuilt when dirty
   names = {},   -- item id -> display name
   dirty = true,
+  backends = {}, -- see above; .items / .fluids hold the last scan
 }
 
 local NAMES_FILE = "data/names.json"
@@ -134,9 +145,29 @@ function M.discover()
   M.tankNames = util.findPeripherals(M.cfg.tanks, ex)
   M.isCraft = util.set(M.craft)
   for _, n in ipairs(M.craftTanks) do M.isCraft[n] = true end
-  log.info("storage: %d inventories, %d tanks; craft storage: %d + %d",
-    #M.storage, #M.tankNames, #M.craft, #M.craftTanks)
+  M.backends = api.filter("storage.backends", {}, M.cfg, M.exclude) or {}
+  -- a bridge listed in cfg.storage is a backend, not an inventory
+  local isBackend = {}
+  for _, b in ipairs(M.backends) do isBackend[b.name] = true end
+  for i = #M.storage, 1, -1 do if isBackend[M.storage[i]] then table.remove(M.storage, i) end end
+  for i = #M.tankNames, 1, -1 do if isBackend[M.tankNames[i]] then table.remove(M.tankNames, i) end end
+  log.info("storage: %d inventories, %d tanks, %d networks; craft storage: %d + %d",
+    #M.storage, #M.tankNames, #M.backends, #M.craft, #M.craftTanks)
 end
+
+local function scanBackend(b)
+  local ok, items, fluids = pcall(b.scan)
+  if ok then
+    b.items, b.fluids = items or {}, fluids or {}
+    for _, it in ipairs(b.items) do
+      if it.displayName and not M.names[it.name] then M.names[it.name] = it.displayName end
+    end
+  else
+    log.warn("%s: %s", b.name, tostring(items))
+  end
+  M.dirty = true
+end
+M.scanBackend = scanBackend
 
 -- Inventories / tanks to take from: craft storage first (that's where orders keep things).
 local function itemSources()
@@ -170,6 +201,7 @@ function M.scan()
   local invs, tanks = itemSources(), tankSources()
   for _, n in ipairs(invs) do fns[#fns + 1] = function() M.scanInv(n) end end
   for _, n in ipairs(tanks) do fns[#fns + 1] = function() M.scanTank(n) end end
+  for _, b in ipairs(M.backends) do fns[#fns + 1] = function() scanBackend(b) end end
   util.parallelBatches(fns, 32)
   -- forget peripherals that were removed
   local live = util.set(invs)
@@ -189,6 +221,23 @@ local function aggregate()
       counts[k] = (counts[k] or 0) + it.count
       byName[it.name] = (byName[it.name] or 0) + it.count
       if main then mainByName[it.name] = (mainByName[it.name] or 0) + it.count end
+    end
+  end
+  for _, b in ipairs(M.backends) do
+    for _, it in ipairs(b.items or {}) do
+      if (it.count or 0) > 0 then
+        local k = M.itemKey(it.name, it.nbt)
+        counts[k] = (counts[k] or 0) + it.count
+        byName[it.name] = (byName[it.name] or 0) + it.count
+        mainByName[it.name] = (mainByName[it.name] or 0) + it.count
+      end
+    end
+    for _, f in ipairs(b.fluids or {}) do
+      if (f.amount or 0) > 0 then
+        local k = M.fluidKey(f.name)
+        fluids[k] = (fluids[k] or 0) + f.amount
+        mainFluids[k] = (mainFluids[k] or 0) + f.amount
+      end
     end
   end
   for tank, list in pairs(M.tanks) do
@@ -313,6 +362,21 @@ function M.extractCached(key, count, to, toSlot)
     end
     if moved >= count then break end
   end
+  for _, b in ipairs(M.backends) do
+    if moved >= count then break end
+    for _, it in ipairs(b.items or {}) do
+      if moved >= count then break end
+      if it.name == name and (nbt == "*" or it.nbt == nbt) and (it.count or 0) > 0 then
+        local ok, n = pcall(b.extract, it.name, it.nbt, math.min(it.count, count - moved), to, toSlot)
+        n = ok and tonumber(n) or 0
+        if n > 0 then
+          moved = moved + n
+          it.count = it.count - n
+          M.dirty = true
+        end
+      end
+    end
+  end
   return moved
 end
 
@@ -332,16 +396,33 @@ function M.insert(from, fromSlot, limit, itemName, pool)
       end
     end
   end
-  for _, inv in ipairs(M.storage) do order[#order + 1] = inv end
-
   local moved, touched = 0, {}
-  for _, inv in ipairs(order) do
-    if moved >= limit then break end
+  local function into(inv)
+    if moved >= limit then return end
     local ok, n = pcall(peripheral.call, inv, "pullItems", from, fromSlot, limit - moved)
     n = ok and n or 0
     if n > 0 then moved = moved + n; touched[inv] = true end
   end
+  for _, inv in ipairs(order) do into(inv) end
+  -- then the networks (AE2 / RS), then any inventory with room
+  if moved < limit and #M.backends > 0 then
+    local name = itemName
+    if not name then
+      local ok, d = pcall(peripheral.call, from, "getItemDetail", fromSlot)
+      name = ok and d and d.name
+    end
+    for _, b in ipairs(M.backends) do
+      if moved >= limit or not name then break end
+      local ok, n = pcall(b.insert, from, fromSlot, limit - moved, name)
+      n = ok and tonumber(n) or 0
+      if n > 0 then moved = moved + n; b.stale = true end
+    end
+  end
+  for _, inv in ipairs(M.storage) do into(inv) end
   for inv in pairs(touched) do M.scanInv(inv) end
+  for _, b in ipairs(M.backends) do
+    if b.stale then b.stale = nil; scanBackend(b) end
+  end
   return moved
 end
 
@@ -353,6 +434,12 @@ function M.extractFluid(key, amount, to)
     if moved >= amount then break end
     local ok, n = pcall(peripheral.call, tank, "pushFluid", to, amount - moved, name)
     if ok and n > 0 then moved = moved + n; M.scanTank(tank) end
+  end
+  for _, b in ipairs(M.backends) do
+    if moved >= amount then break end
+    local ok, n = pcall(b.extractFluid, name, amount - moved, to)
+    n = ok and tonumber(n) or 0
+    if n > 0 then moved = moved + n; scanBackend(b) end
   end
   return moved
 end
@@ -371,12 +458,22 @@ function M.insertFluid(from, key, amount, pool)
       if name and f.name == name and (f.amount or 0) > 0 then holds[t] = true; order[#order + 1] = t break end
     end
   end
-  for _, t in ipairs(M.tankNames) do if not holds[t] then order[#order + 1] = t end end
-  for _, tank in ipairs(order) do
-    if amount and moved >= amount then break end
+  local rest = {}
+  for _, t in ipairs(M.tankNames) do if not holds[t] then rest[#rest + 1] = t end end
+  local function into(tank)
+    if amount and moved >= amount then return end
     local ok, n = pcall(peripheral.call, tank, "pullFluid", from, amount and (amount - moved) or nil, name)
     if ok and n > 0 then moved = moved + n; M.scanTank(tank) end
   end
+  for _, tank in ipairs(order) do into(tank) end
+  for _, b in ipairs(M.backends) do
+    if name and amount and moved < amount then
+      local ok, n = pcall(b.insertFluid, from, name, amount - moved)
+      n = ok and tonumber(n) or 0
+      if n > 0 then moved = moved + n; scanBackend(b) end
+    end
+  end
+  for _, tank in ipairs(rest) do into(tank) end
   return moved
 end
 
@@ -416,6 +513,19 @@ function M.stage(key, n)
       end
     end
     M.scanInv(inv)
+  end
+  for _, b in ipairs(M.backends) do
+    for _, it in ipairs(b.items or {}) do
+      if moved >= n then break end
+      if it.name == name and (nbt == "*" or it.nbt == nbt) and (it.count or 0) > 0 then
+        for _, ci in ipairs(M.craft) do
+          if moved >= n then break end
+          local ok, c = pcall(b.extract, it.name, it.nbt, math.min(it.count, n - moved), ci)
+          c = ok and tonumber(c) or 0
+          if c > 0 then moved = moved + c; it.count = it.count - c; M.dirty = true end
+        end
+      end
+    end
   end
   for _, ci in ipairs(M.craft) do M.scanInv(ci) end
   return moved

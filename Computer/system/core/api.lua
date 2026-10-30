@@ -20,6 +20,8 @@
 --   "machine.workers" (list, r)    filter: peripheral names that may run machine recipe r
 --   "machine.keep"   (inv, item)   any: true leaves that item inside the machine (a circuit)
 --   "machine.label"  (text, name)  filter: text after "[ID-n]" in the ADD menu (starts as "")
+--   "storage.backends" (list, cfg, exclude)  filter: add storage that isn't an inventory (an
+--                                  AE2 / RS bridge), see system/core/indexer.lua
 --   "order.done" / "order.failed" / "order.cancelled" (job)
 local log = require("system.utils.log")
 
