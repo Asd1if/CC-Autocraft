@@ -899,6 +899,28 @@ function M.loop()
     elseif e == "char" and (a == "q" or a == "Q") and not S.typing then
       if not executor.cancel() then message("Nothing to cancel", C.dim) end
       M.draw()
+    elseif e == "char" and (a == "m" or a == "M") and not S.typing then
+      -- Settings in the terminal; crafting goes on meanwhile
+      S.typing = true
+      tasks.spawn(function()
+        local settings, console = require("system.core.settings"), require("system.utils.console")
+        console.pause()
+        local ok, saved, restart = pcall(settings.run, { cfg = api.cfg, mods = require("system.core.mods").names() })
+        if ok and saved then
+          executor.pools = api.cfg.pools or {}
+          if api.rediscover then api.rediscover() end
+          if restart then
+            local a = settings.ask("Monitors/mods changed: restart now? (y/n) ", "y")
+            if a == "y" or a == "Y" then os.reboot() end
+          end
+        end
+        term.clear(); term.setCursorPos(1, 1)
+        console.resume()
+        if not ok then printError(saved) end
+        if ok and saved then message("Settings saved", C.ok) end
+        S.typing = false
+        os.queueEvent("jobs_changed")
+      end, "settings")
     elseif e == "char" and (a == "s" or a == "S") and not S.typing then
       S.typing = true
       tasks.spawn(function()

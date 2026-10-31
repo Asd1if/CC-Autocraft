@@ -9,7 +9,16 @@
 -- (log.info: file only, not echoed), so the log alone shows what the terminal showed.
 local log = require("system.utils.log")
 
-local M = {}
+local M = { paused = false, pending = {} }
+
+-- While a full-screen terminal menu is open (Settings) messages wait and print after it.
+function M.pause() M.paused = true end
+function M.resume()
+  M.paused = false
+  local list = M.pending
+  M.pending = {}
+  for _, f in ipairs(list) do f() end
+end
 
 local out = write or io.write -- CC's write; plain Lua in offline tests
 
@@ -24,6 +33,7 @@ end
 
 -- title in `c`, then rows { left, right } as "left > right" (right may be nil).
 function M.block(title, c, rows)
+  if M.paused then M.pending[#M.pending + 1] = function() M.block(title, c, rows) end return end
   log.info("%s", title)
   for _, r in ipairs(rows or {}) do
     log.info("  %s", r[2] ~= nil and (tostring(r[1]) .. " > " .. tostring(r[2])) or tostring(r[1]))
@@ -47,6 +57,7 @@ end
 
 -- One coloured line without a frame.
 function M.line(text, c)
+  if M.paused then M.pending[#M.pending + 1] = function() M.line(text, c) end return end
   log.info("%s", text)
   color(c or colors.white)
   print(text)

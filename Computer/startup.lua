@@ -17,6 +17,8 @@ local planner  = require("system.craft.planner")
 local executor = require("system.craft.executor")
 local encoder  = require("system.craft.encoder")
 local console  = require("system.utils.console")
+local settings = require("system.core.settings")
+local update   = require("system.core.update")
 
 util.firstStart() -- config.lua, data/multiblock.json, mods/; moves an old data/config.lua
 
@@ -29,6 +31,15 @@ local cfg = util.loadConfig({
 log.file = "data/autocraft.log"
 log.level = cfg.debug_mode and 1 or 3 -- not debug: only WARN and ERROR reach the file
 log.info("autocraft starting")
+
+-- Start menu: Main (after 10 s without a key), Settings, Update
+local choice = settings.startMenu(10)
+if choice == "Settings" then
+  settings.run({ cfg = cfg, mods = modsys.names() }) -- edits cfg in place, the start goes on with it
+elseif choice == "Update" then
+  local ok, err = pcall(update.run, cfg)
+  if not ok then printError(err); print("Starting the old version in 5 s"); sleep(5) end
+end
 
 net.open(cfg.rednet_modem) -- nil: every modem, the wired one is enough
 

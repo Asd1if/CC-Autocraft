@@ -28,6 +28,12 @@ local function files()
   return byName, order
 end
 
+-- Names of every mod file (shipped and own), enabled or not.
+function M.names()
+  local _, order = files()
+  return order
+end
+
 -- Loads and starts every mod. env: the environment mods run in (startup's, so require works).
 function M.load(api, env)
   local disabled = util.set(api.cfg.mods_disabled)

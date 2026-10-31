@@ -6,6 +6,8 @@
 --   inv            -> { ok, items }
 --   craft{count, detail} -> { ok, error, before, after }   (turtle.craft(count))
 --                     detail = true adds maxCount, damage, maxDamage (slow: one tick per slot)
+--   update{body}   -> { ok, error }   new startup.lua from the PC (start menu > Update): checked
+--                     that it compiles, written, then the turtle reboots
 -- Results land from slot 16 on, so they don't mix with the grid.
 -- Announces itself every 10 s so the storage PC learns its wired name.
 local PROTOCOL = "aero"
@@ -67,6 +69,21 @@ local handlers = {
     local ok, err = turtle.craft(payload.count or 1)
     return { ok = ok, error = err, before = before, after = snapshot(payload.detail) }
   end,
+  update = function(payload)
+    local body = payload and payload.body
+    if type(body) ~= "string" or body == "" then return { ok = false, error = "empty program" } end
+    local fn, err = load(body, "startup.lua")
+    if not fn then return { ok = false, error = err } end
+    -- a resent update after the reboot: already this version
+    local cur = fs.open("startup.lua", "r")
+    local old = cur and cur.readAll()
+    if cur then cur.close() end
+    if old == body then return { ok = true } end
+    local h = fs.open("startup.lua", "w")
+    h.write(body)
+    h.close()
+    return { ok = true, reboot = true }
+  end,
 }
 
 -- Last replies by request id: a resent request gets the same answer, nothing runs again.
@@ -89,6 +106,11 @@ local function serve()
         if #doneOrder > 16 then done[table.remove(doneOrder, 1)] = nil end
       end
       send(from, "reply", res, e.id)
+      if res.reboot then
+        print("updated by the storage PC, rebooting")
+        sleep(1)
+        os.reboot()
+      end
     end
   end
 end

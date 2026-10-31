@@ -38,7 +38,13 @@ system/
   mods/          shipped mods: create.lua, gtceu.lua, bridge.lua
   utils/         formatting, log, terminal messages
 ```
-Edit `config.lua`: a Lua table where every key is commented (in Russian). An install from before this layout is moved over on the first start (`data/config.lua` becomes `config.lua`).
+An install from before this layout is moved over on the first start (`data/config.lua` becomes `config.lua`).
+
+## Start menu, Settings, Update
+On boot the computer shows **Main / Settings / Update** (Up/Down, Enter); after 10 s without a key it starts (Main).
+- **Settings** (also **M** on the keyboard while autocraft runs; crafting goes on): storage and tanks (by block type, or Enter on a type to pick single blocks), crafting (batch, timeouts, restock items), machines (pools, multiblocks, monitors), mods (on/off, GregTech tiers, debug log). Up/Down, Enter open/edit, Left/Right change a value, Backspace or Shift back. Saving rewrites `config.lua` (the old one stays as `config.lua.bak`); storage, machines and pools apply at once, monitors and mods after a restart (it asks).
+- **Update** downloads the latest version from GitHub like `install.lua` (keeps `config.lua`, `data/`, `mods/`), sends the new turtle program to every turtle over the network (they reboot themselves) and reboots. Turtles installed before this version need `install.lua` once.
+- `config.lua` is still a plain Lua table and can be edited by hand.
 
 ## Wiring
 ```
@@ -62,6 +68,7 @@ Edit `config.lua`: a Lua table where every key is commented (in Russian). An ins
 Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item of the group" when planning and crafting, for old recipes too.
 
 ## Monitor
+- The tree follows the orders: when it's empty it shows the order that runs now; a finished order stays 5 s (a failed one 30 s), then the tree clears or moves to the next order. An item you tapped is never replaced. Restock orders show only when no order of yours waits.
 - Tap an item to see its craft tree. `0/4 r3` means 3 more are in storage, but queued or running orders hold them. `< << ][ >> >` is −1, −10, order, +10, +1, and `[N]` is the most you can make.
 - An order always crafts the ordered item, even if storage has some. Ingredients come from storage, and so do fluids and items without a recipe.
 - On the selected item with a recipe, `+` turns into a red `-`. Tap it twice within 5 s to delete that recipe.
@@ -111,11 +118,17 @@ Put an Advanced Peripherals **ME Bridge** or **RS Bridge** on the wired network:
 
 ## GregTech (gtceu mod)
 - **Circuits**: put the programmed circuit into the machine's input bus/inventory. A recipe remembers the circuit of the machine it was tested on, and every machine of the same kind with the same circuit runs it too: they share the work like a pool, no config needed. The circuit always stays in the machine.
-- **Tiers**: a recipe tested on an LV machine also runs on MV, HV... machines of the same kind and circuit (`gtceu_tier_up = false` turns it off). The tested machine goes first, then the lowest tiers.
+- **Tiers**: a recipe tested on an LV machine also runs on MV, HV... machines of the same kind and circuit (`gtceu_tier_up = false` turns it off). Higher tiers (faster) go first, the tested machine first within its tier.
 - The ADD menu shows tier and circuit, machines with the same ones on one row: `[0,1,2,3] MV c5`. The test runs on the first; the recipe isn't tied to that ID, at craft time it runs on every machine of that kind and circuit on the network (new ones too).
 - A step is split between the machines in whole runs: every free machine gets work, a portion is at most `batch` (config.lua) and never more than one stack of an ingredient per slot (9 per run: 7 runs, 63 items). 16 runs on four compressors: 4 each; a free machine takes the next portion. While the ingredients still come from a running step (ingots from a depot), each machine holds at most 2 runs, so what arrives is shared between them.
 
+## Several recipes for one item
+The fastest one is used first: test time per item, divided by the machines that share it (4 compressors make a 4 s recipe a 1 s one). If its ingredients run short, it makes what it can and slower recipes make the rest.
+
+Stack sizes: a machine gets at most one stack of an ingredient per slot. Recipes saved before the stack size was recorded learn it from storage (`data/stacks.json`).
+
 ## Multiblocks and multi-input machines (`data/multiblock.json`)
+GregTech multiblocks (EBF, chemical reactor...) are made in Settings > Machines > Multiblocks: input bus = input items, output bus = output items, input/output hatch = fluids; the circuit goes into the input bus.
 ```json
 {
   "mixer_line": {
