@@ -106,7 +106,7 @@ end
 --   system/default/multiblock.json -> data/multiblock.json, an empty mods/ folder.
 -- Existing files are never overwritten: the installer replaces system/, never these.
 function util.firstStart()
-  for _, dir in ipairs({ "data", "mods" }) do
+  for _, dir in ipairs({ "data", "data/theme", "mods" }) do
     if not fs.exists(dir) then fs.makeDir(dir) end
   end
   if not fs.exists("config.lua") then

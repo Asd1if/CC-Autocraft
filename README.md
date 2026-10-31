@@ -46,6 +46,15 @@ On boot the computer shows **Main / Settings / Update** (Up/Down, Enter); after 
 - **Update** downloads the latest version from GitHub like `install.lua` (keeps `config.lua`, `data/`, `mods/`), sends the new turtle program to every turtle over the network (they reboot themselves) and reboots. Turtles installed before this version need `install.lua` once.
 - `config.lua` is still a plain Lua table and can be edited by hand.
 
+## Themes
+Settings > Theme (the first row): Left/Right switch, the terminal and every monitor repaint at once; the turtles get it too and keep it after a reboot. One theme for everything.
+- **default**: ComputerCraft's own colours.
+- **dark**: soft graphite with muted pastel states.
+- **amber**: a retro amber terminal; roles differ by brightness, errors stay red.
+- **brass**: Create's materials: andesite background, brass frames, copper warnings, verdigris fluids.
+
+Your own: `data/theme/<name>.lua` returning the colours to change, e.g. `return { black = 0x1B1F27, blue = 0x3B4F6E, lime = 0x8FC27A }`; slots left out keep the default. It shows up in the list next to the shipped ones. Every shipped theme keeps text at 4.5:1 contrast or more.
+
 ## Wiring
 ```
              wired modem network (one cable)

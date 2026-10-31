@@ -905,7 +905,7 @@ function M.loop()
       tasks.spawn(function()
         local settings, console = require("system.core.settings"), require("system.utils.console")
         console.pause()
-        local ok, saved, restart = pcall(settings.run, { cfg = api.cfg, mods = require("system.core.mods").names() })
+        local ok, saved, restart = pcall(settings.run, { cfg = api.cfg, mods = require("system.core.mods").names(), net = api.net })
         if ok and saved then
           executor.pools = api.cfg.pools or {}
           if api.rediscover then api.rediscover() end

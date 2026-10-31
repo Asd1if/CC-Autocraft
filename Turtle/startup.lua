@@ -6,6 +6,7 @@
 --   inv            -> { ok, items }
 --   craft{count, detail} -> { ok, error, before, after }   (turtle.craft(count))
 --                     detail = true adds maxCount, damage, maxDamage (slow: one tick per slot)
+--   theme{theme, palette} -> { ok }  colours of the PC's theme, kept in theme.txt for the next boot
 --   update{body}   -> { ok, error }   new startup.lua from the PC (start menu > Update): checked
 --                     that it compiles, written, then the turtle reboots
 -- Results land from slot 16 on, so they don't mix with the grid.
@@ -29,6 +30,23 @@ local function send(to, msgType, payload, re)
   counter = counter + 1
   local e = { type = msgType, id = os.getComputerID() .. ":" .. session .. ":" .. counter, re = re, payload = payload }
   if to == "*" then rednet.broadcast(e, PROTOCOL) else rednet.send(to, e, PROTOCOL) end
+end
+
+-- The PC's colour theme: palette = { slot name = 0xRRGGBB }, missing slots back to default.
+local function paint(palette)
+  if not term.setPaletteColour then return end
+  for _, slot in ipairs({ "white", "orange", "magenta", "lightBlue", "yellow", "lime", "pink", "gray",
+    "lightGray", "cyan", "purple", "blue", "brown", "green", "red", "black" }) do
+    local c = colors[slot]
+    if palette and type(palette[slot]) == "number" then term.setPaletteColour(c, palette[slot])
+    else term.setPaletteColour(c, term.nativePaletteColour(c)) end
+  end
+end
+if fs.exists("theme.txt") then
+  local h = fs.open("theme.txt", "r")
+  local t = textutils.unserialise(h.readAll())
+  h.close()
+  if type(t) == "table" then paint(t.palette) end
 end
 
 local GRID = { [1] = true, [2] = true, [3] = true, [5] = true, [6] = true, [7] = true,
@@ -68,6 +86,14 @@ local handlers = {
     turtle.select(16)
     local ok, err = turtle.craft(payload.count or 1)
     return { ok = ok, error = err, before = before, after = snapshot(payload.detail) }
+  end,
+  theme = function(payload)
+    payload = payload or {}
+    paint(payload.palette)
+    local h = fs.open("theme.txt", "w")
+    h.write(textutils.serialise({ theme = payload.theme, palette = payload.palette }))
+    h.close()
+    return { ok = true }
   end,
   update = function(payload)
     local body = payload and payload.body

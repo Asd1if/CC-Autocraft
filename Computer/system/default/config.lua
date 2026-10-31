@@ -7,6 +7,7 @@ return {
 
   main_TextScale = 1,
   fluid_TextScale = 0.5,
+  theme = "default", -- default, dark, amber, brass или своя из data/theme/<имя>.lua (Settings > Theme)
 
   -- ————————————————————————————————
 

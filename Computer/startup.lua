@@ -19,6 +19,7 @@ local encoder  = require("system.craft.encoder")
 local console  = require("system.utils.console")
 local settings = require("system.core.settings")
 local update   = require("system.core.update")
+local theme    = require("system.core.theme")
 
 util.firstStart() -- config.lua, data/multiblock.json, mods/; moves an old data/config.lua
 
@@ -31,6 +32,7 @@ local cfg = util.loadConfig({
 log.file = "data/autocraft.log"
 log.level = cfg.debug_mode and 1 or 3 -- not debug: only WARN and ERROR reach the file
 log.info("autocraft starting")
+theme.applyScreens(cfg.theme)
 
 -- Start menu: Main (after 10 s without a key), Settings, Update
 local choice = settings.startMenu(10)
@@ -42,6 +44,8 @@ elseif choice == "Update" then
 end
 
 net.open(cfg.rednet_modem) -- nil: every modem, the wired one is enough
+theme.applyScreens(cfg.theme) -- Settings may have changed it
+theme.sendTurtles(net)
 
 -- data/multiblock.json: blocks that belong to a multiblock are machines, not storage
 local multiblocks, mbParts
@@ -80,6 +84,7 @@ log.info("%d recipes, %d item types", #recipes.list, indexer.totals().types)
 -- New or removed blocks on the network (and ADD on the monitor): find storage, machines and
 -- multiblocks again. Attach events come in bursts, so it waits a moment for the last one.
 function api.rediscover()
+  theme.applyScreens(cfg.theme) -- a new monitor gets the theme too
   readMultiblocks()
   indexer.init(cfg, mbParts)
   executor.mb = multiblocks
@@ -105,6 +110,7 @@ end
 net.on("turtle_hello", function(msg)
   local name = tostring(msg.payload.name)
   if not executor.turtles[name] then
+    theme.sendTurtles(net, msg.from)
     local same = {}
     for other, t in pairs(executor.turtles) do
       if t.id == msg.from then same[#same + 1] = other end

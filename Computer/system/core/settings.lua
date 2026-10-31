@@ -6,6 +6,7 @@
 -- Saving rewrites config.lua (the old one is kept as config.lua.bak) with the same sections.
 -- Storage, machines and pools apply at once; monitors, the modem and mods after a restart.
 local util = require("system.utils.util")
+local theme = require("system.core.theme")
 
 local M = {}
 
@@ -13,7 +14,7 @@ local M = {}
 
 -- Key order and sections of the written file; keys not listed go to the end.
 M.SECTIONS = {
-  { "Мониторы", { "main_monitor", "fluid_monitor", "main_TextScale", "fluid_TextScale" } },
+  { "Мониторы", { "main_monitor", "fluid_monitor", "main_TextScale", "fluid_TextScale", "theme" } },
   { "Clipboard, сеть, лог", { "clipboard_reader", "clipboard_skip_checked", "rednet_modem", "debug_mode" } },
   { "Крафт", { "craft_timeout", "stall_timeout", "batch", "restock_interval", "rescan" } },
   { "Склад", { "storage", "tanks", "exclude", "craft_storage", "craft_tanks", "encoder", "recipe_tanks" } },
@@ -27,6 +28,7 @@ M.COMMENTS = {
   gtceu_tier_up = "рецепт с LV-машины может идти на MV, HV... того же типа и с той же платой",
   mods_disabled = "выключенные моды: { \"gtceu\" }",
   exclude = "блоки, которые никогда не склад и не машина",
+  theme = "default, dark, amber, brass или своя из data/theme/<имя>.lua",
 }
 
 -- Keys startup.lua adds itself (old names, internal defaults): not written.
@@ -563,8 +565,19 @@ function M.run(opts)
   local mbs = util.readJSON("data/multiblock.json") or {}
   local mbsBefore = deepCopy(mbs)
   local result
+  -- Theme: Left/Right (or Enter) switch it, the screens repaint at once as a preview
+  local function cycle(d)
+    return function()
+      local list = theme.list()
+      local i = indexOf(list, c.theme or "default") or 1
+      c.theme = list[(i - 1 + d) % #list + 1]
+      theme.applyScreens(c.theme)
+    end
+  end
   M.page("Settings", function()
     return {
+      { text = "Theme", value = "< " .. (c.theme or "default") .. " >", color = colors.yellow,
+        enter = cycle(1), left = cycle(-1), right = cycle(1) },
       { text = "Storage & tanks", enter = function() storagePage(c) end },
       { text = "Crafting", enter = function() craftPage(c) end },
       { text = "Machines", enter = function() machinesPage(c, mbs) end },
@@ -581,7 +594,11 @@ function M.run(opts)
   term.setBackgroundColor(colors.black)
   term.clear()
   term.setCursorPos(1, 1)
-  if result ~= "save" or not changed then return nil end
+  if result ~= "save" or not changed then
+    theme.applyScreens(live.theme) -- the preview goes back
+    return nil
+  end
+  if opts.net then theme.sendTurtles(opts.net) end
   local restart = false
   for _, k in ipairs(M.RESTART) do if not same(c[k], live[k]) then restart = true end end
   M.save(c, not same(mbs, mbsBefore) and mbs or nil)
