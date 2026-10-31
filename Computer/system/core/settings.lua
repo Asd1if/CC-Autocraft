@@ -28,7 +28,7 @@ M.COMMENTS = {
   gtceu_tier_up = "рецепт с LV-машины может идти на MV, HV... того же типа и с той же платой",
   mods_disabled = "выключенные моды: { \"gtceu\" }",
   exclude = "блоки, которые никогда не склад и не машина",
-  theme = "default, dark, amber, brass или своя из data/theme/<имя>.lua",
+  theme = "default, dark, brass, sunset, reef, aurora или своя из data/theme/<имя>.lua",
 }
 
 -- Keys startup.lua adds itself (old names, internal defaults): not written.

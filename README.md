@@ -49,11 +49,13 @@ On boot the computer shows **Main / Settings / Update** (Up/Down, Enter); after 
 ## Themes
 Settings > Theme (the first row): Left/Right switch, the terminal and every monitor repaint at once; the turtles get it too and keep it after a reboot. One theme for everything.
 - **default**: ComputerCraft's own colours.
-- **dark**: soft graphite with muted pastel states.
-- **amber**: a retro amber terminal; roles differ by brightness, errors stay red.
+- **dark**: soft graphite with a hint of blue, calm but clear colours.
 - **brass**: Create's materials: andesite background, brass frames, copper warnings, verdigris fluids.
+- **sunset**: plum background with coral, gold and mint.
+- **reef**: deep navy with turquoise fluids, coral errors, sand-yellow crafting.
+- **aurora**: night sky, indigo frames, glowing green, cyan and violet.
 
-Your own: `data/theme/<name>.lua` returning the colours to change, e.g. `return { black = 0x1B1F27, blue = 0x3B4F6E, lime = 0x8FC27A }`; slots left out keep the default. It shows up in the list next to the shipped ones. Every shipped theme keeps text at 4.5:1 contrast or more.
+Your own: `data/theme/<name>.lua` returning the colours to change, e.g. `return { black = 0x1B1F27, blue = 0x3B4F6E, lime = 0x8FC27A }`; slots left out keep the default. It shows up in the list next to the shipped ones. Every shipped theme keeps text at 4.5:1 contrast or more, and its state colours (red, yellow, green, cyan, violet) stay apart on the colour wheel.
 
 ## Wiring
 ```

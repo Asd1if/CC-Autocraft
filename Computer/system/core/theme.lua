@@ -17,31 +17,47 @@ M.BUILTIN = {
   -- ComputerCraft's own palette
   default = {},
 
-  -- soft dark: graphite with a hint of blue, muted pastel states
+  -- soft dark: graphite with a hint of blue, clear but calm colours for every state
   dark = {
     black = 0x1B1F27, gray = 0x4A5263, lightGray = 0x9AA3B2, white = 0xE3E6EB,
-    blue = 0x3B4F6E, lightBlue = 0x8AB4D8, cyan = 0x6FB3BF,
-    green = 0x6FA37F, lime = 0x8FC27A, yellow = 0xE3C27A, orange = 0xD99A6C, red = 0xD16D6D,
-    pink = 0xC795B8, magenta = 0xB07AA8, purple = 0x8C7AB8, brown = 0x8F735A,
-  },
-
-  -- retro amber terminal: one hue, roles told apart by brightness; errors stay red-orange
-  amber = {
-    black = 0x140C02, gray = 0x4A3410, lightGray = 0xA87A32, white = 0xFFC66B,
-    blue = 0x5C3A0C, lightBlue = 0xC9A066, cyan = 0xD9B77A,
-    green = 0xE8A33D, lime = 0xFFE0A3, yellow = 0xFFD27A, orange = 0xF08A24, red = 0xE0462B,
-    pink = 0xD98A5F, magenta = 0xC2703D, purple = 0x9C6A3A, brown = 0x7A5020,
+    blue = 0x3B4F6E, lightBlue = 0x86B8F0, cyan = 0x6FC6D6,
+    green = 0x6FC08F, lime = 0x9DD67A, yellow = 0xF0CC6A, orange = 0xEE9A62, red = 0xEF6F6F,
+    pink = 0xE59AC8, magenta = 0xC58AE0, purple = 0x9C8CE8, brown = 0xA9845F,
   },
 
   -- Create's own materials: andesite casing, brass frame, copper warnings, verdigris fluids
   brass = {
     black = 0x24221F, gray = 0x4D4943, lightGray = 0xA39E94, white = 0xEDE6D6,
-    blue = 0x7A5B26, lightBlue = 0x7FB2C4, cyan = 0x5FA8A0,
-    green = 0x6E9C55, lime = 0x9CC45A, yellow = 0xE6C35C, orange = 0xD07A3F, red = 0xE36A55,
-    pink = 0xC98B9B, magenta = 0xA86A8E, purple = 0x7D6699, brown = 0x8A6240,
+    blue = 0x7A5B26, lightBlue = 0x78BFE0, cyan = 0x4FC2B0,
+    green = 0x7DB85E, lime = 0xA6D65C, yellow = 0xE6C35C, orange = 0xD9803F, red = 0xE36A55,
+    pink = 0xE59AB0, magenta = 0xC27BB0, purple = 0x9A86D0, brown = 0xA87A4F,
+  },
+
+  -- evening sky: plum background, coral, gold and mint against it
+  sunset = {
+    black = 0x2A1B2E, gray = 0x54405A, lightGray = 0xC2A9B8, white = 0xFFE8D6,
+    blue = 0x6B3A6E, lightBlue = 0x8FB8F0, cyan = 0x5EC8D8,
+    green = 0x7FD1A0, lime = 0xA8E07A, yellow = 0xFFD166, orange = 0xFF9E5E, red = 0xFF6B7A,
+    pink = 0xF7A8C8, magenta = 0xD77FD0, purple = 0xA98BE8, brown = 0xB98060,
+  },
+
+  -- coral reef: deep navy water, turquoise fluids, coral errors, sand-yellow crafting
+  reef = {
+    black = 0x0F2233, gray = 0x35506A, lightGray = 0x9FB8C8, white = 0xF2F7F5,
+    blue = 0x1F5F7A, lightBlue = 0x7FC4FF, cyan = 0x4FD6E0,
+    green = 0x4FC28A, lime = 0x7EE0A1, yellow = 0xFFD86B, orange = 0xFF9F59, red = 0xFF6F61,
+    pink = 0xFF9EC4, magenta = 0xE07BE0, purple = 0xA88BFF, brown = 0xC9935E,
+  },
+
+  -- northern lights: night-sky background, indigo frame, glowing green, cyan and violet
+  aurora = {
+    black = 0x101820, gray = 0x34404D, lightGray = 0x97A6B4, white = 0xE8F1F2,
+    blue = 0x2E3F6B, lightBlue = 0x7AB8FF, cyan = 0x5EF0E6,
+    green = 0x3DDC97, lime = 0x7CF29A, yellow = 0xF2E86D, orange = 0xFFA552, red = 0xFF5C8A,
+    pink = 0xFF8AD8, magenta = 0xC77DFF, purple = 0x9D7BFF, brown = 0xC08B5C,
   },
 }
-M.ORDER = { "default", "dark", "amber", "brass" }
+M.ORDER = { "default", "dark", "brass", "sunset", "reef", "aurora" }
 
 M.SLOTS = { "white", "orange", "magenta", "lightBlue", "yellow", "lime", "pink", "gray",
   "lightGray", "cyan", "purple", "blue", "brown", "green", "red", "black" }
