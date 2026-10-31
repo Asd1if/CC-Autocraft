@@ -635,7 +635,11 @@ local function menuPick(o)
   elseif m.state == "mod" then
     -- machines with the same label (a mod's "MV c5") are one row: "[0,1,2,3] MV c5"; the
     -- test runs on the first, the recipe runs on all of them (api "machine.workers")
-    local types = {}
+    local types, names = {}, {}
+    for _, name in ipairs(m.machines) do
+      if util.getMod(name) == o.value then names[#names + 1] = name end
+    end
+    api.emit("machine.labels", names)
     for _, name in ipairs(m.machines) do
       if util.getMod(name) == o.value then
         local _, machine, id = util.parsePeripheralName(name)

@@ -217,7 +217,7 @@ function M.testMachine(r, fluidAmounts, onProgress)
   local io = executor.machineIO(r)
   local grid = M.readGrid()
   local base = executor.snapshotIO(io)
-  local inputs, byInput = {}, {}
+  local inputs, byInput, maxOf = {}, {}, {}
   local several = #io.inputs > 1
 
   for i, g in ipairs(grid) do
@@ -233,6 +233,7 @@ function M.testMachine(r, fluidAmounts, onProgress)
         inputs[g.key] = (inputs[g.key] or 0) + moved
         byInput[into] = byInput[into] or {}
         byInput[into][g.key] = (byInput[into][g.key] or 0) + moved
+        maxOf[g.key] = g.maxCount
       end
     end
   end
@@ -312,8 +313,11 @@ function M.testMachine(r, fluidAmounts, onProgress)
 
   local fluids = {}
   for k, v in pairs(inputs) do if indexer.isFluid(k) then fluids[k] = v end end
+  local list = routed(byInput, fluids)
+  -- stack size: how many runs fit a machine slot at once (executor.stackRuns)
+  for _, e in ipairs(list) do e.maxCount = maxOf[e.key] end
   return {
-    type = r.type, machine = r.machine, inputs = routed(byInput, fluids), outputs = outputs, time = elapsed,
+    type = r.type, machine = r.machine, inputs = list, outputs = outputs, time = elapsed,
   }
 end
 

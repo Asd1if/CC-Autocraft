@@ -83,6 +83,20 @@ function M.chip(name, fresh)
   return chip
 end
 
+-- Reads the circuits of many machines at once (one list() per machine takes a tick; one
+-- after another they lag with dozens of machines). Entries are names or { name = }.
+function M.prefetch(list, fresh)
+  local fns = {}
+  for _, e in ipairs(list) do
+    local name = type(e) == "table" and e.name or e
+    local c = cache[name]
+    if fresh or not c or os.clock() - c.at >= 5 then
+      fns[#fns + 1] = function() M.chip(name, true) end
+    end
+  end
+  util.parallelBatches(fns, 32)
+end
+
 -- "c5" for circuit 5, "c?1a2b" for an unknown hash, "" for none.
 function M.chipLabel(chip)
   if not chip then return "" end
@@ -96,11 +110,16 @@ function M.workers(r, names, tierUp)
   if not base then return nil end
   local chip = r.chip
   if chip == nil then chip = M.chip(r.machine) end -- recipe saved before this mod
-  local out = {}
+  local cand = {}
   for _, name in ipairs(names) do
     local b, t = M.parse(name)
     local tierOk = (t == tier) or (tierUp and t and tier and t > tier)
-    if b == base and tierOk and M.chip(name) == chip then out[#out + 1] = { name = name, tier = t or 0 } end
+    if b == base and tierOk then cand[#cand + 1] = { name = name, tier = t or 0 } end
+  end
+  M.prefetch(cand)
+  local out = {}
+  for _, w in ipairs(cand) do
+    if M.chip(w.name) == chip then out[#out + 1] = w end
   end
   table.sort(out, function(a, b)
     if (a.name == r.machine) ~= (b.name == r.machine) then return a.name == r.machine end
@@ -142,12 +161,15 @@ function M.init(api)
     if not base then return nil end
     local parts = {}
     if tier then parts[#parts + 1] = tierName(tier) end
-    local chip = M.chipLabel(M.chip(name, true))
+    local chip = M.chipLabel(M.chip(name))
     if chip ~= "" then parts[#parts + 1] = chip end
     return table.concat(parts, " ")
   end)
 
   api.on("peripherals", function() cache = {} end)
+
+  -- the ADD menu asks for many labels at once: read their circuits in parallel first
+  api.on("machine.labels", function(names) M.prefetch(names, true) end)
 end
 
 return M
