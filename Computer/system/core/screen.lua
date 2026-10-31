@@ -633,19 +633,35 @@ local function menuPick(o)
     if #list == 0 then message("No machines on the network", C.err); S.menu = nil return end
     m.state, m.list, m.scroll = "mod", list, 0
   elseif m.state == "mod" then
+    -- machines with the same label (a mod's "MV c5") are one row: "[0,1,2,3] MV c5"; the
+    -- test runs on the first, the recipe runs on all of them (api "machine.workers")
     local types = {}
     for _, name in ipairs(m.machines) do
       if util.getMod(name) == o.value then
         local _, machine, id = util.parsePeripheralName(name)
         types[machine] = types[machine] or {}
         local extra = api.filter("machine.label", "", name)
-        table.insert(types[machine], { label = "[ID-" .. tostring(id or 0) .. "]" .. (extra ~= "" and (" " .. extra) or ""),
-          value = name, id = id or 0 })
+        table.insert(types[machine], { value = name, id = id or 0, extra = extra })
       end
     end
     local list = {}
-    for machine, ids in pairs(types) do
-      table.sort(ids, function(a, b) return a.id < b.id end)
+    for machine, all in pairs(types) do
+      table.sort(all, function(a, b) return a.id < b.id end)
+      local ids, byExtra = {}, {}
+      for _, e in ipairs(all) do
+        local g = e.extra ~= "" and byExtra[e.extra]
+        if g then
+          g.ids[#g.ids + 1] = e.id
+        else
+          g = { value = e.value, id = e.id, extra = e.extra, ids = { e.id } }
+          ids[#ids + 1] = g
+          if e.extra ~= "" then byExtra[e.extra] = g end
+        end
+      end
+      for _, g in ipairs(ids) do
+        local head = #g.ids > 1 and ("[" .. table.concat(g.ids, ",") .. "]") or ("[ID-" .. g.id .. "]")
+        g.label = head .. (g.extra ~= "" and (" " .. g.extra) or "")
+      end
       list[#list + 1] = { label = util.formatName(machine), value = ids }
     end
     table.sort(list, function(a, b) return a.label < b.label end)

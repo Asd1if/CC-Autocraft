@@ -657,29 +657,40 @@ local function runMachine(job, s)
   end
 end
 
--- A step split between pool members: each gets a share of the runs and
--- works it like a step of its own (sub.parent = s); the step's progress is their sum.
+-- Runs a machine is fed at once (multiblock "batch", else cfg.batch).
+function M.batchOf(name)
+  local ok, io = pcall(M.memberIO, name)
+  return math.max(1, ok and io.batch or M.cfg.batch or 16)
+end
+
+-- A step split between pool members by batches: a free member takes the next batch of runs
+-- (a whole batch, fewer only for the last one) and works it like a step of its own
+-- (sub.parent = s), then takes the next. The step's progress is the sum of the batches.
 local function runSplit(job, s, workers, work)
-  local subs, fns = {}, {}
-  local n = #workers
-  for i, w in ipairs(workers) do
-    local share = math.floor(s.runs / n) + (i <= s.runs % n and 1 or 0)
-    if share > 0 then
-      local sub = { key = s.key, recipe = s.recipe, runs = share, deps = s.deps, doneRuns = 0, parent = s }
-      subs[#subs + 1] = sub
-      fns[#fns + 1] = function() work(sub, w); sub.finished = true end
+  local subs, fns, left, active = {}, {}, s.runs, #workers
+  for _, w in ipairs(workers) do
+    fns[#fns + 1] = function()
+      local size = M.batchOf(w)
+      while left > 0 do
+        local n = math.min(size, left)
+        left = left - n
+        local sub = { key = s.key, recipe = s.recipe, runs = n, deps = s.deps, doneRuns = 0, parent = s, worker = w }
+        subs[#subs + 1] = sub
+        work(sub, w)
+        sub.finished = true
+      end
+      active = active - 1
     end
   end
   fns[#fns + 1] = function()
     while true do
-      local done, progress, all = 0, 0, true
+      local done, progress = 0, 0
       for _, sub in ipairs(subs) do
         done = done + sub.doneRuns
         progress = progress + (sub.progress or sub.doneRuns)
-        if not sub.finished then all = false end
       end
       s.doneRuns, s.progress = done, progress
-      if all then return end
+      if active == 0 then return end
       sleep(0.5)
     end
   end
@@ -715,7 +726,8 @@ local function busyKey(name)
 end
 
 -- Which resource a step needs and whether it's free. Returns a claim or nil.
--- A turtle step takes one free turtle, a pool step every free member (no more than it has runs).
+-- A turtle step takes one free turtle, a pool step every free member (no more than it has
+-- batches: 20 runs with batch 16 take two machines, 10 runs one).
 -- A machine step may run on more machines than the one it was tested on: mods say which
 -- (api "machine.workers": the same GregTech machine with the same circuit, a higher tier).
 -- With several it works like a pool.
@@ -735,10 +747,12 @@ local function claimFor(s)
     return { turtle = t }
   end
   local workers = M.workers(r)
-  if r.type == "pool" or #workers > 1 then
-    local got = {}
+  -- one worker that isn't the tested machine (it left the network): run there like a pool
+  if r.type == "pool" or #workers > 1 or (workers[1] and workers[1] ~= r.machine) then
+    local got, batches = {}, math.huge
+    if workers[1] then batches = math.ceil(s.runs / M.batchOf(workers[1])) end
     for _, name in ipairs(workers) do
-      if #got >= s.runs then break end
+      if #got >= batches then break end
       if not M.busy[busyKey(name)] then got[#got + 1] = name end
     end
     if #got == 0 then

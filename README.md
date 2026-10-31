@@ -90,7 +90,7 @@ Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item
 | `exclude` | names that match the lists above but aren't storage |
 | `craft_storage`, `craft_tanks` | separate storage for running orders (exact names); empty = off |
 | `encoder`, `recipe_tanks` | the encoder barrel and its fluid tanks |
-| `pools` | several identical machines under one name, a step is split between them |
+| `pools` | several identical machines under one name, a step is split between them by batches |
 | `restock` | `[item] = minimum`, crafted automatically when nothing else runs |
 | `substitutes` | groups of interchangeable items, see below |
 | `mods_disabled` | mods to turn off, e.g. `{ "gtceu" }` |
@@ -112,7 +112,8 @@ Put an Advanced Peripherals **ME Bridge** or **RS Bridge** on the wired network:
 ## GregTech (gtceu mod)
 - **Circuits**: put the programmed circuit into the machine's input bus/inventory. A recipe remembers the circuit of the machine it was tested on, and every machine of the same kind with the same circuit runs it too: they share the work like a pool, no config needed. The circuit always stays in the machine.
 - **Tiers**: a recipe tested on an LV machine also runs on MV, HV... machines of the same kind and circuit (`gtceu_tier_up = false` turns it off). The tested machine goes first, then the lowest tiers.
-- The ADD menu shows tier and circuit next to each machine: `[ID-3] LV c5`.
+- The ADD menu shows tier and circuit, machines with the same ones on one row: `[0,1,2,3] MV c5`. The test runs on the first; the recipe isn't tied to that ID, at craft time it runs on every machine of that kind and circuit on the network (new ones too).
+- A step is split by batches (`batch` in config.lua): each machine gets a whole batch, a free one takes the next. 40 runs with batch 16 on four compressors: 16 + 16 + 8 on three of them; 10 runs stay on one.
 
 ## Multiblocks and multi-input machines (`data/multiblock.json`)
 ```json
