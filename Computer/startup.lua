@@ -60,6 +60,7 @@ encoder.init(cfg)
 screen.init(cfg, multiblocks)
 executor.deliverFluid = encoder.deliverFluid
 recipes.matches, recipes.groupMembers, recipes.substitute = indexer.matches, indexer.groupMembers, indexer.substitute
+recipes.parallel = executor.parallel
 local hasTankMonitor = tankpanel.init(cfg, screen.monName)
 api.emit("init")
 executor.restore() -- orders that were unfinished when the PC stopped

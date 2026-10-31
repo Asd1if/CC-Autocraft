@@ -87,6 +87,32 @@ function M.yield(r, key)
   return n
 end
 
+-- How many machines/turtles run r at once (startup sets it from the executor); 1 offline.
+M.parallel = function() return 1 end
+
+-- Seconds one item of key takes with recipe r: the test time per run over the yield and the
+-- machines that share the work. Unknown time (old recipes): last.
+function M.secondsPer(r, key)
+  local y = M.yield(r, key)
+  if not r.time or not y or y <= 0 then return math.huge end
+  return r.time / y / math.max(1, M.parallel(r) or 1)
+end
+
+-- The recipes of key, fastest first (ties: priority). Main-output recipes still come first.
+function M.fastest(key)
+  local list = {}
+  for i, r in ipairs(M.forOutput(key)) do list[i] = r end
+  local speed, main = {}, {}
+  for _, r in ipairs(list) do speed[r] = M.secondsPer(r, key); main[r] = M.mainKey(r) == key end
+  table.sort(list, function(a, b)
+    if main[a] ~= main[b] then return main[a] end
+    if speed[a] ~= speed[b] then return speed[a] < speed[b] end
+    if (a.priority or 1) ~= (b.priority or 1) then return (a.priority or 1) < (b.priority or 1) end
+    return (a.id or 0) < (b.id or 0)
+  end)
+  return list
+end
+
 function M.forOutput(key)
   if key:sub(1, 1) == "@" then
     -- recipes of every member, the most stocked kind first

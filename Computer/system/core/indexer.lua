@@ -34,6 +34,7 @@ local M = {
 }
 
 local NAMES_FILE = "data/names.json"
+local STACKS_FILE = "data/stacks.json" -- item id -> stack size, learned with the names
 
 function M.itemKey(name, nbt) return nbt and (name .. "#" .. nbt) or name end
 function M.fluidKey(name) return "~" .. name end
@@ -126,6 +127,7 @@ end
 function M.init(cfg, extraExclude)
   M.cfg = cfg
   M.names = util.readJSON(NAMES_FILE) or {}
+  M.stacks = util.readJSON(STACKS_FILE) or {}
   groupOf = nil
   local ex = util.set(cfg.exclude)
   if cfg.encoder then ex[cfg.encoder] = true end
@@ -545,21 +547,32 @@ function M.sweep()
   end
 end
 
--- Fetches display names for a few unknown items (getItemDetail is slow, so it's spread over time).
+-- Fetches display names and stack sizes for a few unknown items (getItemDetail is slow, so
+-- it's spread over time).
 function M.learnNames(maxPerCall)
   local learned = 0
   for _, inv in ipairs(itemSources()) do
     for slot, it in pairs(M.invs[inv] or {}) do
       if learned >= (maxPerCall or 8) then break end
-      if not M.names[it.name] then
+      if not M.names[it.name] or not M.stacks[it.name] then
         local ok, d = pcall(peripheral.call, inv, "getItemDetail", slot)
-        M.names[it.name] = ok and d and d.displayName or util.formatName(it.name)
+        if not M.names[it.name] then M.names[it.name] = ok and d and d.displayName or util.formatName(it.name) end
+        if ok and d and d.maxCount then M.stacks[it.name] = d.maxCount end
         learned = learned + 1
       end
     end
   end
-  if learned > 0 then util.writeJSON(NAMES_FILE, M.names) end
+  if learned > 0 then
+    util.writeJSON(NAMES_FILE, M.names)
+    util.writeJSON(STACKS_FILE, M.stacks)
+  end
   return learned
+end
+
+-- Stack size of an item key: learned from storage, nil if not known yet.
+function M.stackSize(key)
+  if M.isFluid(key) or M.isGroup(key) then return nil end
+  return (M.stacks or {})[(key:gsub("#.*$", ""))]
 end
 
 -- Background loop: full rescan every cfg.rescan seconds.

@@ -11,7 +11,8 @@
 -- Rules: take from stock first, then from leftovers/byproducts of earlier steps ("virtual"),
 -- then craft. The ordered item itself (each item of a list) is always crafted when it has a
 -- recipe: an order means "make this", storage stock of it is left alone. Fluids and items
--- without a recipe are still taken from stock. Recipes are tried by priority; the first one that fully succeeds wins.
+-- without a recipe are still taken from stock. Recipes are tried fastest first (recipes.fastest:
+-- test time per item, shared by the machines that run it); the first one that fully succeeds wins.
 -- If none succeeds alone, recipes are combined: each makes as much as storage allows, the next
 -- one the rest (5 ingots in stock, 1 iron block, raw iron for the rest). Such a node is `mixed`,
 -- its children are one part per recipe. Still short: the highest-priority recipe is kept so the
@@ -184,7 +185,7 @@ function M.plan(target, qty, avail, recipes, points)
     end
     if q == 0 then return node end
 
-    local rs = recipes.forOutput(k)
+    local rs = recipes.fastest and recipes.fastest(k) or recipes.forOutput(k)
     if #rs == 0 or path[k] or depth > 64 then
       node.missing = q
       return node
@@ -192,14 +193,7 @@ function M.plan(target, qty, avail, recipes, points)
 
     path[k] = true
     local craft, children, missing
-    for _, r in ipairs(rs) do
-      local m = mark()
-      craft, children, missing = expand(r, k, q, path, depth)
-      if missing == 0 then break end
-      rollback(m)
-      craft = nil
-    end
-    if not craft and #rs > 1 then
+    local function tryMix()
       local m = mark()
       local parts = mix(rs, k, q, path, depth)
       if parts then
@@ -209,6 +203,25 @@ function M.plan(target, qty, avail, recipes, points)
         return node
       end
       rollback(m)
+    end
+    -- the fastest recipe alone; short of ingredients: as much as it can, the rest by the
+    -- next ones (mix); only then a slower recipe alone
+    local m = mark()
+    craft, children, missing = expand(rs[1], k, q, path, depth)
+    if missing ~= 0 then
+      rollback(m)
+      craft = nil
+      if #rs > 1 then
+        local mixed = tryMix()
+        if mixed then return mixed end
+      end
+      for i = 2, #rs do
+        m = mark()
+        craft, children, missing = expand(rs[i], k, q, path, depth)
+        if missing == 0 then break end
+        rollback(m)
+        craft = nil
+      end
     end
     if not craft then craft, children, missing = expand(rs[1], k, q, path, depth) end
     path[k] = nil

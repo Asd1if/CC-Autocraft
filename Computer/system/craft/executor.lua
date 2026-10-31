@@ -681,7 +681,8 @@ function M.stackRuns(r)
   for _, inp in ipairs(r.inputs or {}) do
     if not indexer.isFluid(inp.key) then
       local id = inp.key .. ">" .. (inp.into or 1)
-      per[id] = per[id] or { count = 0, max = inp.maxCount or 64 }
+      -- recipes saved before maxCount was recorded: the size learned from storage
+      per[id] = per[id] or { count = 0, max = inp.maxCount or indexer.stackSize(inp.key) or 64 }
       per[id].count = per[id].count + inp.count
     end
   end
@@ -762,6 +763,16 @@ function M.workers(r)
   if r.type == "pool" then return M.pools[r.machine] or {} end
   if r.type == "machine" then return api.filter("machine.workers", { r.machine }, r) end
   return { r.machine }
+end
+
+-- How many run recipe r at once: online turtles, or the machines that share it.
+function M.parallel(r)
+  if r.type == "turtle" then
+    local n = 0
+    for _, t in pairs(M.turtles) do if alive(t) then n = n + 1 end end
+    return math.max(1, n)
+  end
+  return math.max(1, #M.workers(r))
 end
 
 -- Returns a claim, or nil + why the step can't start now.

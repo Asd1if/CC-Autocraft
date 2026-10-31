@@ -8,7 +8,8 @@
 --
 -- Tier: "gtceu:lv_electric_furnace_0" is an LV electric furnace. A recipe tested on LV may run
 -- on MV, HV... machines of the same kind and circuit (config.lua: gtceu_tier_up = false keeps
--- it on the tier it was tested on). The tested machine comes first, then the lowest tiers.
+-- it on the tier it was tested on). Higher tiers (faster) come first, the tested machine
+-- first within its tier.
 --
 -- The ADD menu shows tier and circuit next to each machine: "[ID-3] LV c5".
 local util = require("system.utils.util")
@@ -104,7 +105,7 @@ function M.chipLabel(chip)
   return n and ("c" .. n) or ("c?" .. chip:sub(1, 4))
 end
 
--- Machines that can run recipe r, the tested one first, then by tier and name. nil: not ours.
+-- Machines that can run recipe r, highest tier first, the tested one first in its tier. nil: not ours.
 function M.workers(r, names, tierUp)
   local base, tier = M.parse(r.machine)
   if not base then return nil end
@@ -122,8 +123,8 @@ function M.workers(r, names, tierUp)
     if M.chip(w.name) == chip then out[#out + 1] = w end
   end
   table.sort(out, function(a, b)
+    if a.tier ~= b.tier then return a.tier > b.tier end
     if (a.name == r.machine) ~= (b.name == r.machine) then return a.name == r.machine end
-    if a.tier ~= b.tier then return a.tier < b.tier end
     return a.name < b.name
   end)
   local list = {}

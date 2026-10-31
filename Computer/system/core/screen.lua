@@ -855,6 +855,31 @@ end
 -- for previews/tests: show a given state
 M.state = S
 
+-- The tree follows the orders by itself: a finished order stays 5 s (a failed one 30 s), then
+-- the tree clears or shows the order that runs now. A new order replaces an empty tree or a
+-- finished one, never an item you are looking at. Restock orders show only when no order of
+-- yours is waiting.
+local CLEAR_AFTER = { done = 5, cancelled = 5, failed = 30 }
+local function finished(job) return job and CLEAR_AFTER[job.status] ~= nil end
+
+function M.autoTree()
+  local job = S.job
+  if finished(job) then
+    job.clearAt = job.clearAt or (os.clock() + CLEAR_AFTER[job.status])
+    if os.clock() < job.clearAt then return end
+    S.job, S.selected, S.plan, S.treePage, S.maxHint = nil, nil, nil, 0, nil
+  end
+  if S.job or S.selected or S.menu or S.panel then return end
+  local active = executor.activeJob()
+  if not active then return end
+  if active.auto then
+    for _, j in ipairs(executor.jobs) do
+      if not j.auto and (j.status == "queued" or j.status == "running") then return end
+    end
+  end
+  S.job, S.selected, S.amount, S.maxHint, S.treePage = active, active.key, active.qty, nil, 0
+end
+
 function M.refresh()
   refreshItems()
   if S.selected and not (S.job and S.job.status == "running") then replan() end
@@ -898,8 +923,10 @@ function M.loop()
         if job.status == "failed" then message("Failed: see the terminal", C.err, 20) end
         if job.status == "cancelled" then message("Cancelled: " .. executor.label(job.key, job.qty), C.warn) end
       end
+      M.autoTree()
       M.draw()
     elseif os.clock() >= due then
+      M.autoTree()
       M.draw()
       due = os.clock() + 1
       os.startTimer(1)
