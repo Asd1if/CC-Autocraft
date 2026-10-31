@@ -608,9 +608,18 @@ local function runMachine(job, s)
   local timeout = M.cfg.craft_timeout or 60
   while produced < expect do
     if job.error then error("stopped: " .. job.error, 0) end
-    local runs = math.min(s.runs, math.floor(produced / per) + batch)
+    -- a pool member whose ingredients still trickle in from a running producer keeps at most
+    -- 2 runs inside, so what arrives is shared between the machines instead of the first
+    -- one taking it all
+    local ahead = batch
+    if s.parent and depsRunning(s) then ahead = math.min(batch, 2) end
+    local runs = math.min(s.runs, math.floor(produced / per) + ahead)
     for _, f in ipairs(feeds) do
       local n = f.count * runs - f.fed
+      -- whole runs only: 9 per run and 13 in storage -> 9
+      if n > 0 and not indexer.isFluid(f.key) and f.count > 1 then
+        n = math.min(n, math.floor(indexer.count(f.key) / f.count) * f.count)
+      end
       if n > 0 then
         local moved
         if indexer.isFluid(f.key) then moved = indexer.extractFluid(f.key, n, io.inFluid)

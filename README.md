@@ -113,7 +113,7 @@ Put an Advanced Peripherals **ME Bridge** or **RS Bridge** on the wired network:
 - **Circuits**: put the programmed circuit into the machine's input bus/inventory. A recipe remembers the circuit of the machine it was tested on, and every machine of the same kind with the same circuit runs it too: they share the work like a pool, no config needed. The circuit always stays in the machine.
 - **Tiers**: a recipe tested on an LV machine also runs on MV, HV... machines of the same kind and circuit (`gtceu_tier_up = false` turns it off). The tested machine goes first, then the lowest tiers.
 - The ADD menu shows tier and circuit, machines with the same ones on one row: `[0,1,2,3] MV c5`. The test runs on the first; the recipe isn't tied to that ID, at craft time it runs on every machine of that kind and circuit on the network (new ones too).
-- A step is split between the machines in whole runs: every free machine gets work, a portion is at most `batch` (config.lua) and never more than one stack of an ingredient per slot (9 per run: 7 runs, 63 items). 16 runs on four compressors: 4 each; a free machine takes the next portion.
+- A step is split between the machines in whole runs: every free machine gets work, a portion is at most `batch` (config.lua) and never more than one stack of an ingredient per slot (9 per run: 7 runs, 63 items). 16 runs on four compressors: 4 each; a free machine takes the next portion. While the ingredients still come from a running step (ingots from a depot), each machine holds at most 2 runs, so what arrives is shared between them.
 
 ## Multiblocks and multi-input machines (`data/multiblock.json`)
 ```json
