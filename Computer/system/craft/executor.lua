@@ -27,7 +27,8 @@ local planner = require("system.craft.planner")
 local util    = require("system.utils.util")
 local api     = require("system.core.api")
 
-local M = { jobs = {}, nextId = 1, busy = {}, turtles = {}, mb = {}, pools = {}, nextRestock = 0 }
+local M = { jobs = {}, nextId = 1, busy = {}, turtles = {}, mb = {}, pools = {}, nextRestock = 0,
+  fixed = {} } -- inventory -> { key = count } that belongs to the machine (see M.fixtures)
 
 M.TSLOT = { 1, 2, 3, 5, 6, 7, 9, 10, 11 } -- turtle crafting grid
 local GRID_SLOT = {}
@@ -207,18 +208,48 @@ local function isInput(inKeys, k)
   return false
 end
 
+-- What lies in a machine when a step starts and is neither an input nor an output of the
+-- recipe belongs to the machine: upgrade modules, speed cards, molds, a lens. Those counts are
+-- never taken out (collect, drain); anything new (byproducts) still is.
+function M.fixtures(io, r)
+  local inKeys, outKeys = {}, {}
+  for _, inp in ipairs(r.inputs or {}) do inKeys[recipes.inputKey(r, inp.key)] = true end
+  for _, o in ipairs(r.outputs or {}) do outKeys[o.key] = true end
+  for _, inv in ipairs(io.items or { io.outItem }) do
+    local base = {}
+    local ok, list = pcall(peripheral.call, inv, "list")
+    for _, it in pairs(ok and list or {}) do
+      local k = itemKey(it)
+      if not isInput(inKeys, k) and not isInput(outKeys, k) then base[k] = (base[k] or 0) + it.count end
+    end
+    M.fixed[inv] = base
+  end
+end
+
+-- How much of an item in `inv` may leave: its count minus what belongs to the machine.
+local function takeable(inv)
+  local left = util.copy(M.fixed[inv] or {})
+  return function(k, count)
+    local keep = math.min(left[k] or 0, count)
+    if keep > 0 then left[k] = left[k] - keep end
+    return count - keep
+  end
+end
+
 -- Inputs stay where they were put (depot, basin, deployer hand); a separate output block
--- gives everything back, inputs too.
+-- gives everything back, inputs too. The machine's own things stay (M.fixtures).
 local function collect(io, inKeys, pool)
   local got = {}
   for _, inv in ipairs(io.items or { io.outItem }) do
     local ok, list = pcall(peripheral.call, inv, "list")
     if ok and list then
+      local may = takeable(inv)
       for slot, it in pairs(list) do
         local k = itemKey(it)
         local stays = io.isInput and io.isInput[inv] and isInput(inKeys, k)
         if not stays and not api.any("machine.keep", inv, it) then
-          local n = indexer.insert(inv, slot, it.count, it.name, pool)
+          local n = may(k, it.count)
+          if n > 0 then n = indexer.insert(inv, slot, n, it.name, pool) end
           if n > 0 then got[k] = (got[k] or 0) + n end
         end
       end
@@ -583,6 +614,8 @@ end
 local function runMachine(job, s)
   local r = s.recipe
   local io = s.io or M.machineIO(r)
+  s.io = io
+  M.fixtures(io, r)
   -- inputs are fed at most `batch` runs ahead of what came out; feeds = one per key and
   -- inventory (input.into: which of the machine's inputs, the deployer's hand for example)
   local feeds, byId = {}, {}
@@ -733,13 +766,16 @@ local function runPool(job, s, members)
   end)
 end
 
--- Everything in a machine (inputs too) back to storage: after a failed or cancelled step.
+-- Everything in a machine (inputs too) back to storage after a failed or cancelled step, except
+-- what belongs to the machine (M.fixtures).
 local function drain(io)
   for _, inv in ipairs(io.items or { io.inItem, io.outItem }) do
     local ok, list = pcall(peripheral.call, inv, "list")
     if ok and list then
+      local may = takeable(inv)
       for slot, it in pairs(list) do
-        if not api.any("machine.keep", inv, it) then indexer.insert(inv, slot, it.count, it.name, "craft") end
+        local n = may(itemKey(it), it.count)
+        if n > 0 and not api.any("machine.keep", inv, it) then indexer.insert(inv, slot, n, it.name, "craft") end
       end
     end
   end

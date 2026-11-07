@@ -133,6 +133,9 @@ Put an Advanced Peripherals **ME Bridge** or **RS Bridge** on the wired network:
 - The ADD menu shows tier and circuit, machines with the same ones on one row: `[0,1,2,3] MV c5`. The test runs on the first; the recipe isn't tied to that ID, at craft time it runs on every machine of that kind and circuit on the network (new ones too).
 - A step is split between the machines in whole runs: every free machine gets work, a portion is at most `batch` (config.lua) and never more than one stack of an ingredient per slot (9 per run: 7 runs, 63 items). 16 runs on four compressors: 4 each; a free machine takes the next portion. While the ingredients still come from a running step (ingots from a depot), each machine holds at most 2 runs, so what arrives is shared between them.
 
+## Things that live in a machine
+Upgrade modules, speed cards, molds, a lens: whatever lies in a machine when a step starts and is neither an input nor an output of the recipe stays there. Results and new byproducts are taken; a failed step gives back only its own items.
+
 ## Several recipes for one item
 The fastest one is used first: test time per item, divided by the machines that share it (4 compressors make a 4 s recipe a 1 s one). If its ingredients run short, it makes what it can and slower recipes make the rest.
 
