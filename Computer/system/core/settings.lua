@@ -552,6 +552,215 @@ local function modsPage(c, modNames)
   end)
 end
 
+-- ---------------------------------------------------------------- recipes
+
+local function shortName(key) return (tostring(key):gsub("^[^:]+:", "")) end
+
+local function recipeTitle(R, r)
+  local where = r.type == "turtle" and "turtle" or tostring(r.machine)
+  return shortName(R.mainKey(r) or "?") .. " (" .. where .. ")"
+end
+
+-- GregTech circuits to cycle through: none, the known ones by number, and the recipe's own.
+local function chipChoices(gt, current)
+  local list = { false }
+  local known = {}
+  for hash, n in pairs(gt.CHIPS) do known[#known + 1] = { hash = hash, n = n } end
+  table.sort(known, function(a, b) return a.n < b.n end)
+  local seen = false
+  for _, e in ipairs(known) do
+    list[#list + 1] = e.hash
+    if e.hash == current then seen = true end
+  end
+  if current and not seen then list[#list + 1] = current end
+  return list
+end
+
+local function sameRecipe(a, b)
+  return a.type == b.type and a.machine == b.machine and M.serialize(a.inputs) == M.serialize(b.inputs)
+    and M.serialize(a.outputs) == M.serialize(b.outputs)
+end
+
+-- One recipe: on/off, machine, circuit, time, priority, amounts, delete. Edits go to the
+-- list at once; the recipes page saves when it's left.
+function M.recipePage(R, r, dirty)
+  local okGt, gt = pcall(require, "system.mods.gtceu")
+  if not okGt then gt = nil end
+  local function mark() dirty.on = true end
+  M.page("Recipes > " .. recipeTitle(R, r), function()
+    local rows = {}
+    local function flipOn() r.disabled = (not r.disabled) or nil; mark() end
+    rows[#rows + 1] = { text = "Used", value = r.disabled and "off" or "on",
+      color = r.disabled and colors.red or colors.lime, enter = flipOn, left = flipOn, right = flipOn }
+    if r.type ~= "turtle" then
+      rows[#rows + 1] = { text = r.type == "pool" and "Pool" or (r.type == "multiblock" and "Multiblock" or "Machine"),
+        value = tostring(r.machine), enter = function()
+          if r.type == "machine" then
+            local before = r.machine
+            M.pickOne("Machine", r, "machine", "any", "(keep " .. tostring(before) .. ")")
+            if r.machine == nil then r.machine = before end
+            if r.machine ~= before then mark() end
+          else
+            local n = M.ask(r.type == "pool" and "Pool name: " or "Multiblock name: ", r.machine)
+            if n and n ~= r.machine then r.machine = n; mark() end
+          end
+        end }
+    end
+    if gt and r.type == "machine" and gt.parse(tostring(r.machine)) then
+      local function step(d)
+        return function()
+          local list = chipChoices(gt, r.chip)
+          local i = 1
+          for j, v in ipairs(list) do if v == (r.chip or false) then i = j end end
+          r.chip = list[(i - 1 + d) % #list + 1]
+          mark()
+        end
+      end
+      rows[#rows + 1] = { text = "GregTech circuit", value = "< " .. (r.chip and gt.chipLabel(r.chip) or "none") .. " >",
+        left = step(-1), right = step(1), enter = step(1) }
+      rows[#rows + 1] = { text = "Circuit from a machine", enter = function()
+        local t = {}
+        M.pickOne("Take the circuit of", t, "name", "items", "(cancel)")
+        if t.name then r.chip = gt.chip(t.name, true); mark() end
+      end }
+    end
+    for _, f in ipairs({ { "Time per run, s", "time", 0.5, 0, true, "unknown" }, { "Priority (lower first)", "priority", 1, 1 } }) do
+      local row = numRow(f[1], r, f[2], f[3], f[4], f[5], f[6])
+      for _, h in ipairs({ "enter", "left", "right" }) do
+        local fn = row[h]
+        row[h] = function() local before = r[f[2]]; fn(); if r[f[2]] ~= before then mark() end end
+      end
+      rows[#rows + 1] = row
+    end
+    local function amountRows(list, label, canRemove)
+      for i, e in ipairs(list) do
+        local function add(d) return function() e.count = math.max(1, (e.count or 1) + d); mark() end end
+        rows[#rows + 1] = { text = label .. shortName(e.key) .. (e.main and " (main)" or ""), value = "x" .. tostring(e.count),
+          left = add(-1), right = add(1), enter = function()
+            local removable = canRemove(e)
+            local n = tonumber(M.ask(shortName(e.key) .. (removable and " (0 = remove): " or ": "), e.count))
+            if n and n <= 0 and removable then table.remove(list, i); mark()
+            elseif n and n > 0 then e.count = n; mark() end
+          end }
+      end
+    end
+    if r.type ~= "turtle" then amountRows(r.inputs, "in  ", function() return #r.inputs > 1 end) end
+    amountRows(r.outputs, "out ", function(e) return not e.main end)
+    rows[#rows + 1] = { text = "Delete recipe", color = colors.red, enter = function()
+      local a = M.ask("Delete this recipe? (y/n) ", "n")
+      if a == "y" or a == "Y" then
+        for i, x in ipairs(R.list) do if x == r then table.remove(R.list, i) break end end
+        mark()
+        return "back"
+      end
+    end }
+    return rows
+  end, "Enter edit  <> change  Bksp back")
+end
+
+M.EXPORT = "data/recipes_export.json"
+
+local function pressKey()
+  term.setTextColor(colors.gray)
+  print("Press any key")
+  os.pullEvent("key")
+end
+
+local function startText()
+  term.setBackgroundColor(colors.black)
+  term.clear()
+  term.setCursorPos(1, 1)
+  term.setTextColor(colors.white)
+end
+
+function M.exportRecipes(R)
+  startText()
+  util.writeJSON(M.EXPORT, R.list)
+  print(("%d recipes written to %s"):format(#R.list, M.EXPORT))
+  if shell and http then
+    term.setTextColor(colors.yellow)
+    write("Upload to pastebin too? (y/n) ")
+    term.setTextColor(colors.white)
+    local a = read()
+    if a == "y" or a == "Y" then shell.run("pastebin", "put", M.EXPORT) end
+  end
+  pressKey()
+end
+
+-- Adds the recipes of a file (or a pastebin code) that aren't here yet. Returns how many.
+function M.importFile(R, path)
+  local list = util.readJSON(path)
+  if type(list) ~= "table" then return nil, "not a recipe list: " .. path end
+  local added, total = 0, 0
+  for _, r in ipairs(list) do
+    if type(r) == "table" and type(r.outputs) == "table" and type(r.inputs) == "table" and #r.outputs > 0 then
+      total = total + 1
+      local dup = false
+      for _, x in ipairs(R.list) do if sameRecipe(x, r) then dup = true break end end
+      if not dup then
+        r.id, r.priority = nil, nil
+        if r.grid then
+          for i = 1, 9 do if type(r.grid[i]) ~= "table" or not r.grid[i].key then r.grid[i] = {} end end
+        end
+        R.add(r)
+        added = added + 1
+      end
+    end
+  end
+  return added, total
+end
+
+function M.importRecipes(R)
+  local src = M.ask("File or pastebin code: ", M.EXPORT)
+  if not src then return 0 end
+  startText()
+  local path = src
+  if not fs.exists(src) then
+    if not (shell and http) then print("No such file: " .. src) pressKey() return 0 end
+    path = "data/recipes_import.json"
+    if fs.exists(path) then fs.delete(path) end
+    shell.run("pastebin", "get", src, path)
+  end
+  local added, total = M.importFile(R, path)
+  if not added then print(total)
+  else print(("%d new recipes, %d were already here"):format(added, total - added)) end
+  pressKey()
+  return added or 0
+end
+
+-- Every recipe, by name; Enter edits one. Saved (recipes.json) when the page is left.
+function M.recipesPage(R)
+  if #R.list == 0 then pcall(R.load) end
+  local dirty = { on = false }
+  local filter
+  M.page("Settings > Recipes", function()
+    local rows = {
+      { text = "Search: " .. (filter or "all"), color = colors.yellow, enter = function()
+        filter = M.ask("Search (empty = all): ")
+        filter = filter and filter:lower()
+      end },
+      { text = "Export to a file / pastebin", enter = function() M.exportRecipes(R) end },
+      { text = "Import from a file / pastebin", enter = function() M.importRecipes(R) end },
+    }
+    local list = {}
+    for _, r in ipairs(R.list) do
+      local title = recipeTitle(R, r)
+      if not filter or title:lower():find(filter, 1, true) then list[#list + 1] = { r = r, title = title } end
+    end
+    table.sort(list, function(a, b) return a.title < b.title end)
+    for _, e in ipairs(list) do
+      rows[#rows + 1] = { text = e.title, value = e.r.disabled and "off" or nil,
+        color = e.r.disabled and colors.red or nil, enter = function() M.recipePage(R, e.r, dirty) end }
+    end
+    return rows
+  end, "Enter open  Bksp back (saves)")
+  if dirty.on then
+    R.reindex()
+    R.save()
+  end
+  return dirty.on
+end
+
 -- Keys whose change needs a restart (read once at start).
 M.RESTART = { "main_monitor", "fluid_monitor", "main_TextScale", "fluid_TextScale", "rednet_modem",
   "mods_disabled", "gtceu_tier_up", "debug_mode", "encoder", "recipe_tanks" }
@@ -582,6 +791,7 @@ function M.run(opts)
       { text = "Crafting", enter = function() craftPage(c) end },
       { text = "Machines", enter = function() machinesPage(c, mbs) end },
       { text = "Mods", enter = function() modsPage(c, opts.mods or {}) end },
+      { text = "Recipes", enter = function() M.recipesPage(opts.recipes or require("system.craft.recipes")) end },
       { text = "Save and exit", color = colors.lime, enter = function() result = "save" return "back" end },
       { text = "Exit without saving", color = colors.red, enter = function() result = "discard" return "back" end },
     }

@@ -16,10 +16,11 @@ local log  = require("system.utils.log")
 
 local M = { list = {}, byOutput = {}, path = "data/recipes.json", backup = "data/recipes.json.bak" }
 
+-- Recipes turned off in Settings > Recipes (r.disabled) stay in the list but aren't used.
 local function reindex()
   M.byOutput = {}
   for _, r in ipairs(M.list) do
-    for _, o in ipairs(r.outputs) do
+    for _, o in ipairs(r.disabled and {} or r.outputs) do
       local t = M.byOutput[o.key] or {}
       t[#t + 1] = r
       M.byOutput[o.key] = t
@@ -164,6 +165,8 @@ function M.isUnpack(r)
   end
   return false
 end
+
+M.reindex = reindex
 
 function M.hasRecipe(key)
   return M.byOutput[key] ~= nil

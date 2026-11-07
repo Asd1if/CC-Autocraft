@@ -43,6 +43,7 @@ An install from before this layout is moved over on the first start (`data/confi
 ## Start menu, Settings, Update
 On boot the computer shows **Main / Settings / Update** (Up/Down, Enter); after 10 s without a key it starts (Main).
 - **Settings** (also **M** on the keyboard while autocraft runs; crafting goes on): storage and tanks (by block type, or Enter on a type to pick single blocks), crafting (batch, timeouts, restock items), machines (pools, multiblocks, monitors), mods (on/off, GregTech tiers, debug log). Up/Down, Enter open/edit, Left/Right change a value, Backspace or Shift back. Saving rewrites `config.lua` (the old one stays as `config.lua.bak`); storage, machines and pools apply at once, monitors and mods after a restart (it asks).
+- **Settings > Recipes**: every recipe by name (Search on top). Enter opens one: **Used** on/off (an off recipe is kept but never planned), machine, GregTech circuit (Left/Right, or take it from a machine), time and priority, the amount of each input and output (Left/Right ±1, Enter types it; 0 removes a byproduct or an extra input; the main output stays), **Delete recipe**. Saved to `data/recipes.json` when you leave the page. **Export** writes `data/recipes_export.json` and can upload it to pastebin; **Import** takes a file path or a pastebin code and adds only the recipes you don't have yet.
 - **Update** downloads the latest version from GitHub like `install.lua` (keeps `config.lua`, `data/`, `mods/`), sends the new turtle program to every turtle over the network (they reboot themselves) and reboots. Turtles installed before this version need `install.lua` once.
 - `config.lua` is still a plain Lua table and can be edited by hand.
 
@@ -84,6 +85,7 @@ Recipes stay as encoded. Groups in `substitutes` (below) make an input "any item
 - An order always crafts the ordered item, even if storage has some. Ingredients come from storage, and so do fluids and items without a recipe.
 - On the selected item with a recipe, `+` turns into a red `-`. Tap it twice within 5 s to delete that recipe.
 - The queue shows on top of the list: green is done, yellow is crafting, orange is next, red is later. Tap a row to see its tree.
+- **Favourites**: a `*` shows next to the selected item; tap it to pin the item on top of the list (`* ` in front), tap again to unpin. Pinned items stay listed even at 0. Kept in `data/favorites.json`.
 - **S** on the computer's keyboard searches; **Q** cancels the running order.
 - `[Clip]` (create mod) reads a Create clipboard (Material Checklist) through an Advanced Peripherals Block Reader and orders the whole list.
 - Messages (order placed, done, missing items, failures) are printed in the computer's terminal.
@@ -125,6 +127,7 @@ Put an Advanced Peripherals **ME Bridge** or **RS Bridge** on the wired network:
 - `exclude = { "me_bridge_0" }` leaves one bridge out, `mods_disabled = { "bridge" }` all of them.
 - Don't also list a vault that the network reads through a storage bus: it would be counted twice.
 - Items with data (damaged tools, filled containers) are told apart by the bridge's fingerprint and don't merge with the same item in a vault.
+- **Autocraft through the network**: an item that has no recipe of ours but has a pattern in AE2 / RS is crafted by the network (`craftItem`); the tree shows it as a `network` step and waits for the job. Our own recipes always come first.
 - Written for the AP 0.8 / 1.21.1 API (`getItems`, `exportItem(filter, target)`, `importItem`); the older names are tried too.
 
 ## GregTech (gtceu mod)
