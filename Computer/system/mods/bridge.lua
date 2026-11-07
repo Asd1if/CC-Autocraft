@@ -7,6 +7,10 @@
 -- craft storage), so it can stand anywhere on the cable.
 -- config.lua: exclude = { "me_bridge_0" } leaves one out, mods_disabled = { "bridge" } all.
 --
+-- Autocrafting: an item we have no recipe for but the network has a pattern for is crafted by
+-- the network (craftItem); the order waits until the job is done. b.craftable holds the
+-- craftable item ids from the last scan.
+--
 -- Items with data components (damaged tools, filled containers) are told apart by the bridge's
 -- fingerprint: "name#<fingerprint>". They don't merge with the same item lying in a vault,
 -- whose CC hash differs, so keep such items in one kind of storage.
@@ -55,6 +59,11 @@ function M.backend(name)
           nbt = hasData(it) and it.fingerprint or nil }
       end
     end
+    local okC, craftable = pcall(call, p, { "getCraftableItems", "listCraftableItems" }, {})
+    b.craftable = {}
+    for _, it in ipairs(okC and craftable or {}) do
+      if it.name then b.craftable[it.name] = true end
+    end
     local ok, list = pcall(call, p, { "getFluids", "listFluids", "listFluid" }, {})
     for _, f in ipairs(ok and list or {}) do
       local n = tonumber(f.count or f.amount) or 0
@@ -73,6 +82,23 @@ function M.backend(name)
     local f = filter(itemName, nil, n, { fromSlot = slot })
     if p.importItem then return amount(p.importItem(f, from)) end
     return amount(p.importItemFromPeripheral(f, from))
+  end
+
+  -- Starts a network craft. Returns a job object (AP 0.8: isDone, hasErrorOccurred...) or true
+  -- (0.7), or nil + error.
+  function b.craft(itemName, n)
+    if not p.craftItem then return nil, "this bridge can't craft" end
+    local res, err = p.craftItem({ name = itemName, count = n })
+    if not res then return nil, err or "the network refused the craft" end
+    return res
+  end
+
+  -- Is a craft of this item still running (0.7 has no job object).
+  function b.crafting(itemName)
+    local f = p.isCrafting or p.isItemCrafting
+    if not f then return false end
+    local ok, v = pcall(f, { name = itemName })
+    return ok and v == true
   end
 
   function b.extractFluid(fluid, n, to)

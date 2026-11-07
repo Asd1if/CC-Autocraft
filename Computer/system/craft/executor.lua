@@ -759,6 +759,44 @@ local function runSplit(job, s, workers, work)
   parallel.waitForAll(table.unpack(fns))
 end
 
+-- A step the AE2 / RS network crafts: ask it, wait for the job, the results land in the
+-- network (main storage).
+local function runNetwork(job, s, b)
+  local r = s.recipe
+  local key = recipes.mainKey(r)
+  local res, err = b.craft(key, s.runs)
+  if not res then error(b.name .. " can't craft it: " .. tostring(err), 0) end
+  s.why = "crafting in " .. b.name
+  local function q(f)
+    if type(res) ~= "table" or type(res[f]) ~= "function" then return nil end
+    local ok, v = pcall(res[f])
+    return ok and v or nil
+  end
+  local started = os.clock()
+  while true do
+    if job.error then
+      q("cancel") -- AP 0.8: stop the network's job too
+      error("stopped: " .. job.error, 0)
+    end
+    sleep(1)
+    if type(res) == "table" then
+      if q("isDone") then break end
+      if q("isCanceled") then error(b.name .. ": the craft was cancelled", 0) end
+      if q("hasErrorOccurred") or q("isCalculationNotSuccessful") then
+        error(b.name .. ": " .. tostring(q("getDebugMessage") or "the craft failed"), 0)
+      end
+      local total, done = q("getTotalItems"), q("getItemProgress")
+      if total and total > 0 and done then s.progress = math.min(s.runs, s.runs * done / total) end
+    elseif not b.crafting(key) and os.clock() - started > 2 then
+      break
+    end
+    os.queueEvent("jobs_changed")
+  end
+  s.why = nil
+  indexer.scanBackend(b)
+  keep(job, s, key, s.runs)
+end
+
 local function runPool(job, s, members)
   runSplit(job, s, members, function(sub, name)
     sub.io = M.memberIO(name)
@@ -797,6 +835,7 @@ end
 -- With several it works like a pool.
 function M.workers(r)
   if r.type == "pool" then return M.pools[r.machine] or {} end
+  if r.type == "network" then return { r.machine } end
   if r.type == "machine" then return api.filter("machine.workers", { r.machine }, r) end
   return { r.machine }
 end
@@ -819,6 +858,11 @@ local function claimFor(s)
     if not t then return nil, M.anyTurtle() and "all turtles busy" or "no turtle online" end
     t.busy = true
     return { turtle = t }
+  end
+  if r.type == "network" then
+    local b = indexer.backendNamed(r.machine)
+    if not b then return nil, r.machine .. " not on the network" end
+    return { network = b } -- the network runs many crafts at once: never busy
   end
   local workers = M.workers(r)
   -- one worker that isn't the tested machine (it left the network): run there like a pool
@@ -855,6 +899,7 @@ local function runStep(job, s, claim)
   local ok, err = pcall(function()
     if claim.turtle then runTurtle(job, s, claim.turtle)
     elseif claim.members then runPool(job, s, claim.members)
+    elseif claim.network then runNetwork(job, s, claim.network)
     else runMachine(job, s) end
   end)
   if not ok then

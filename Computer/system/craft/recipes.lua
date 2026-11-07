@@ -87,6 +87,10 @@ function M.yield(r, key)
   return n
 end
 
+-- Recipes from outside, for items we have none for (startup: the AE2 / RS network's
+-- patterns, indexer.networkRecipe). key -> recipe or nil.
+M.external = function() return nil end
+
 -- How many machines/turtles run r at once (startup sets it from the executor); 1 offline.
 M.parallel = function() return 1 end
 
@@ -126,7 +130,10 @@ function M.forOutput(key)
   end
   local name, any = key:match("^(.+)#(%*)$")
   if any then return M.byOutput[name] or {} end
-  return M.byOutput[key] or {}
+  local own = M.byOutput[key]
+  if own and #own > 0 then return own end
+  local ext = M.external(key)
+  return ext and { ext } or {}
 end
 
 -- Runs per turtle.craft call: limited by cap, by how many fit into a grid slot and by the

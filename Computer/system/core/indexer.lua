@@ -569,6 +569,27 @@ function M.learnNames(maxPerCall)
   return learned
 end
 
+-- An item the AE2 / RS network can craft (a pattern there) as a recipe of its own:
+-- { type = "network", machine = bridge name, outputs = { key x1 } }, nil if none can.
+local netRecipes = {}
+function M.networkRecipe(key)
+  if M.isFluid(key) or M.isGroup(key) or key:find("#", 1, true) then return nil end
+  for _, b in ipairs(M.backends) do
+    if b.craft and b.craftable and b.craftable[key] then
+      local r = netRecipes[key]
+      if not r or r.machine ~= b.name then
+        r = { type = "network", machine = b.name, inputs = {}, outputs = { { key = key, count = 1, main = true } } }
+        netRecipes[key] = r
+      end
+      return r
+    end
+  end
+end
+
+function M.backendNamed(name)
+  for _, b in ipairs(M.backends) do if b.name == name then return b end end
+end
+
 -- Stack size of an item key: learned from storage, nil if not known yet.
 function M.stackSize(key)
   if M.isFluid(key) or M.isGroup(key) then return nil end

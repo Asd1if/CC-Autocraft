@@ -76,6 +76,7 @@ screen.init(cfg, multiblocks)
 executor.deliverFluid = encoder.deliverFluid
 recipes.matches, recipes.groupMembers, recipes.substitute = indexer.matches, indexer.groupMembers, indexer.substitute
 recipes.parallel = executor.parallel
+recipes.external = indexer.networkRecipe -- AE2 / RS patterns for items we have no recipe for
 local hasTankMonitor = tankpanel.init(cfg, screen.monName)
 api.emit("init")
 executor.restore() -- orders that were unfinished when the PC stopped
