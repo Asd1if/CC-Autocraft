@@ -116,10 +116,36 @@ end
 
 -- ---------------------------------------------------------------- data
 
+-- Favourites: pinned on top of the list, shown even at 0 (data/favorites.json, a list of keys).
+-- The * left of the selected item pins or unpins it.
+local FAV_FILE = "data/favorites.json"
+local function favorites()
+  if not S.fav then
+    S.fav = {}
+    for i, k in ipairs(util.readJSON(FAV_FILE) or {}) do S.fav[k] = i end
+  end
+  return S.fav
+end
+
+local function toggleFavorite(key)
+  local fav = favorites()
+  if fav[key] then fav[key] = nil else
+    local n = 0
+    for _, i in pairs(fav) do n = math.max(n, i) end
+    fav[key] = n + 1
+  end
+  local list = {}
+  for k in pairs(fav) do list[#list + 1] = k end
+  table.sort(list, function(a, b) return fav[a] < fav[b] end)
+  util.writeJSON(FAV_FILE, list)
+end
+M.toggleFavorite = toggleFavorite
+
 local function refreshItems()
   local rows = indexer.stockList()
   local list = {}
   local seen = {}
+  local fav = favorites()
   local function match(key)
     if not S.filter then return true end
     return key:lower():find(S.filter, 1, true) or indexer.displayName(key):lower():find(S.filter, 1, true)
@@ -139,8 +165,16 @@ local function refreshItems()
       list[#list + 1] = { key = key, count = 0, craft = true }
     end
   end
-  for _, e in ipairs(list) do e.sortName = indexer.displayName(e.key):lower() end
-  table.sort(list, function(a, b) -- most first, equal counts A-Z by shown name
+  -- favourites with none in storage and no recipe still show
+  for key in pairs(fav) do
+    if not seen[key] and not recipes.byOutput[key] and (S.mode == "fluid") == indexer.isFluid(key) and match(key) then
+      list[#list + 1] = { key = key, count = 0, craft = false }
+    end
+  end
+  for _, e in ipairs(list) do e.sortName = indexer.displayName(e.key):lower(); e.fav = fav[e.key] end
+  table.sort(list, function(a, b) -- favourites in pin order, then most first, equal counts A-Z by shown name
+    if (a.fav ~= nil) ~= (b.fav ~= nil) then return a.fav ~= nil end
+    if a.fav and b.fav and a.fav ~= b.fav then return a.fav < b.fav end
     if a.count ~= b.count then return a.count > b.count end
     if a.sortName ~= b.sortName then return a.sortName < b.sortName end
     return a.key < b.key
@@ -391,7 +425,7 @@ local function drawList()
   if p then return p.draw() end
   local off = drawListHead()
   S.listOff = off
-  S.minusAt = nil
+  S.minusAt, S.starAt = nil, nil
   if S.filter and #S.items == 0 then at(g.listX, g.listY + off, "nothing found", C.dim) end
   for i = 1, g.listH - 1 - off do
     local e = S.items[S.scroll + i]
@@ -399,11 +433,18 @@ local function drawList()
     local sel = e.key == S.selected
     local count = displayCount(e.key, e.count)
     local suffix = "[" .. count .. (e.craft and "+" or " ") .. "]"
-    local nameW = g.listW - #suffix - (sel and 2 or 0)
+    local nameW = g.listW - #suffix - ((sel or e.fav) and 2 or 0)
     local name = pad(indexer.displayName(e.key), nameW)
     local y = g.listY + off + i - 1
     local x = g.listX
-    if sel then at(x, y, "> ", C.sel); x = x + 2 end
+    if sel then
+      -- "*" pins it to the top (yellow: pinned), ">" marks the selection
+      at(x, y, "*", e.fav and C.partial or C.dim); at(x + 1, y, ">", C.sel)
+      S.starAt = { x = x, y = y, key = e.key }
+      x = x + 2
+    elseif e.fav then
+      at(x, y, "* ", C.partial); x = x + 2
+    end
     at(x, y, name, sel and C.sel or (indexer.isFluid(e.key) and C.fluid or C.text))
     at(x + nameW, y, "[", C.dim)
     at(x + nameW + 1, y, count, e.count == 0 and C.err or C.text)
@@ -808,6 +849,13 @@ function M.touch(x, y)
   if y < g.listY + off then return end
   local m = S.minusAt
   if m and y == m.y and x >= m.x and x <= m.x + 1 then return deleteRecipe(m.key) end
+  local st = S.starAt
+  if st and y == st.y and x <= st.x + 1 then
+    toggleFavorite(st.key)
+    refreshItems()
+    message(S.fav[st.key] and "Pinned to the top" or "Unpinned", C.ok)
+    return
+  end
   if inRect(x, y, g.listX, g.listY, W - 1, g.listY + g.listH - 2) then
     local e = S.items[S.scroll + y - g.listY - off + 1]
     if e then
